@@ -10,6 +10,7 @@
 *> www.vagucs.com.br
 *>
 *> Um tic de andar: giro, impulso, paredes e atrito. Sem rato.
+*> O lodo tira vida a cada 32 tics, com o pe no chao.
 IDENTIFICATION DIVISION.
 PROGRAM-ID. walk-tic.
 
@@ -39,12 +40,13 @@ COPY "playstate.cpy".
 01 box-b BINARY-LONG.
 01 box-t BINARY-LONG.
 01 seen-gen BINARY-LONG VALUE 0.
-01 seen-ln BINARY-LONG OCCURS 1024 TIMES.
+01 seen-ln BINARY-LONG OCCURS 1104 TIMES.
 01 bsp BINARY-LONG.
 01 node-slot BINARY-LONG.
 01 sub-slot BINARY-LONG.
 01 sub-n BINARY-LONG.
 01 sec-slot BINARY-LONG.
+01 spot-sec BINARY-LONG.
 01 step-n BINARY-LONG.
 01 bit-n BINARY-LONG.
 01 side-bit BINARY-LONG.
@@ -211,21 +213,29 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-momy RETURNING want-y
         MOVE want-x TO try-x
         MOVE want-y TO try-y
-        PERFORM try-spot
-        IF hit-n = 0
+        IF ply-clip = 1
+            PERFORM sector-at
+            MOVE sec-slot TO spot-sec
+            MOVE sec-floor-h(sec-slot) TO floor-z
+            MOVE sec-ceil-h(sec-slot) TO ceil-z
             PERFORM accept-spot
         ELSE
-            MOVE ply-x TO try-x
-            MOVE want-y TO try-y
             PERFORM try-spot
             IF hit-n = 0
                 PERFORM accept-spot
             ELSE
-                MOVE want-x TO try-x
-                MOVE ply-y TO try-y
+                MOVE ply-x TO try-x
+                MOVE want-y TO try-y
                 PERFORM try-spot
                 IF hit-n = 0
                     PERFORM accept-spot
+                ELSE
+                    MOVE want-x TO try-x
+                    MOVE ply-y TO try-y
+                    PERFORM try-spot
+                    IF hit-n = 0
+                        PERFORM accept-spot
+                    END-IF
                 END-IF
             END-IF
         END-IF
@@ -266,6 +276,9 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         CALL "fixed_mul" USING BY VALUE half-b BY VALUE sn RETURNING ply-vbob
     END-IF
     ADD 1 TO ply-tic
+    IF ply-hp > 0
+        CALL "item-tic"
+    END-IF
     GOBACK.
 
 apply-friction.
@@ -309,6 +322,9 @@ apply-z.
     .
 
 ease-view.
+    IF ply-hp <= 0
+        EXIT PARAGRAPH
+    END-IF
     CALL "add_i32" USING BY VALUE ply-vh BY VALUE ply-dvh RETURNING ply-vh
     IF ply-vh > 2686976
         MOVE 2686976 TO ply-vh
@@ -333,6 +349,7 @@ accept-spot.
     MOVE try-y TO ply-y
     MOVE floor-z TO ply-floor
     MOVE ceil-z TO ply-ceil
+    MOVE spot-sec TO ply-room
     .
 
 try-spot.
@@ -342,6 +359,7 @@ try-spot.
     CALL "sub_i32" USING BY VALUE try-y BY VALUE ply-rad RETURNING box-b
     CALL "add_i32" USING BY VALUE try-y BY VALUE ply-rad RETURNING box-t
     PERFORM sector-at
+    MOVE sec-slot TO spot-sec
     MOVE sec-floor-h(sec-slot) TO floor-z
     MOVE sec-ceil-h(sec-slot) TO ceil-z
     MOVE floor-z TO drop-z
@@ -654,3 +672,100 @@ sector-at.
     .
 
 END PROGRAM walk-tic.
+
+IDENTIFICATION DIVISION.
+PROGRAM-ID. floor-tic.
+
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+COPY "mapstate.cpy".
+COPY "playstate.cpy".
+01 q-n BINARY-LONG.
+01 rem-n BINARY-LONG.
+01 spec-n BINARY-LONG.
+01 dmg-n BINARY-LONG.
+01 atk-on BINARY-LONG.
+01 atk-x BINARY-LONG.
+01 atk-y BINARY-LONG.
+01 saved-n BINARY-LONG.
+
+LINKAGE SECTION.
+01 hurt-out BINARY-LONG.
+
+PROCEDURE DIVISION USING hurt-out.
+main-floor.
+    MOVE 0 TO hurt-out
+    IF ply-on = 0
+        GOBACK
+    END-IF
+    IF ply-room >= 1 AND ply-room <= n-sector
+        IF sec-special(ply-room) = 9
+            ADD 1 TO ply-secs
+            MOVE 0 TO sec-special(ply-room)
+        END-IF
+    END-IF
+    DIVIDE ply-time BY 32 GIVING q-n REMAINDER rem-n
+    ADD 1 TO ply-time
+    IF rem-n NOT = 0
+        GOBACK
+    END-IF
+    IF ply-hp <= 0
+        GOBACK
+    END-IF
+    IF ply-room < 1 OR ply-room > n-sector
+        GOBACK
+    END-IF
+    IF ply-z NOT = sec-floor-h(ply-room)
+        GOBACK
+    END-IF
+    MOVE sec-special(ply-room) TO spec-n
+    MOVE 0 TO dmg-n
+    IF spec-n = 5
+        MOVE 10 TO dmg-n
+    END-IF
+    IF spec-n = 7
+        MOVE 5 TO dmg-n
+    END-IF
+    IF spec-n = 4 OR spec-n = 16 OR spec-n = 11
+        MOVE 20 TO dmg-n
+    END-IF
+    IF dmg-n = 0 OR ply-god = 1
+        GOBACK
+    END-IF
+    IF ply-atype > 0 AND ply-armor > 0
+        IF ply-atype = 1
+            DIVIDE dmg-n BY 3 GIVING saved-n
+        ELSE
+            DIVIDE dmg-n BY 2 GIVING saved-n
+        END-IF
+        IF saved-n > ply-armor
+            MOVE ply-armor TO saved-n
+            MOVE 0 TO ply-atype
+        ELSE
+            IF saved-n = ply-armor
+                MOVE 0 TO ply-atype
+            END-IF
+        END-IF
+        SUBTRACT saved-n FROM ply-armor
+        SUBTRACT saved-n FROM dmg-n
+    END-IF
+    IF dmg-n > 0
+        SUBTRACT dmg-n FROM ply-hp
+        IF ply-hp < 0
+            MOVE 0 TO ply-hp
+        END-IF
+        ADD dmg-n TO ply-pain
+        IF ply-pain > 100
+            MOVE 100 TO ply-pain
+        END-IF
+        MOVE 0 TO atk-on
+        CALL "face-hit" USING dmg-n atk-on atk-x atk-y
+        CALL "ply-ouch"
+    END-IF
+    MOVE 1 TO hurt-out
+    IF spec-n = 11 AND ply-hp <= 10 AND ply-exit = 0
+        MOVE 35 TO ply-exit
+    END-IF
+    GOBACK.
+
+END PROGRAM floor-tic.

@@ -202,6 +202,7 @@ DATA DIVISION.
 WORKING-STORAGE SECTION.
 COPY "mapstate.cpy".
 COPY "sprstate.cpy".
+COPY "playstate.cpy".
 01 i BINARY-LONG.
 01 j BINARY-LONG.
 01 bit-n BINARY-LONG.
@@ -219,13 +220,23 @@ COPY "sprstate.cpy".
 01 sec-slot BINARY-LONG.
 01 step-n BINARY-LONG.
 01 tmp BINARY-LONG.
-01 spawn-done BINARY-LONG VALUE 0.
 
 PROCEDURE DIVISION.
-    IF spawn-done = 1
+    IF spr-once = 1
         GOBACK
     END-IF
     MOVE 0 TO n-mobj
+    MOVE 0 TO map-kills
+    MOVE 0 TO map-items
+    MOVE 0 TO map-secs
+    MOVE 0 TO ply-kills
+    MOVE 0 TO ply-items
+    MOVE 0 TO ply-secs
+    PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-sector
+        IF sec-special(i) = 9
+            ADD 1 TO map-secs
+        END-IF
+    END-PERFORM
     PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-thing
         MOVE th-kind(i) TO kind-n
         MOVE th-opt(i) TO opt-n
@@ -248,11 +259,11 @@ PROCEDURE DIVISION.
             END-IF
         END-IF
     END-PERFORM
-    MOVE 1 TO spawn-done
+    MOVE 1 TO spr-once
     GOBACK.
 
 place-one.
-    IF n-mobj >= 256
+    IF n-mobj >= 384
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO row-i
@@ -277,6 +288,16 @@ place-one.
             RETURNING flags-n
     END-IF
     MOVE flags-n TO mo-flags(n-mobj)
+    CALL "bit_and" USING BY VALUE flags-n BY VALUE 4194304
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        ADD 1 TO map-kills
+    END-IF
+    CALL "bit_and" USING BY VALUE flags-n BY VALUE 1
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        ADD 1 TO map-items
+    END-IF
     MOVE sp-name(row-i) TO mo-name(n-mobj)
     MOVE sp-height(row-i) TO mo-h(n-mobj)
     MOVE 1310720 TO mo-rad(n-mobj)
@@ -329,9 +350,11 @@ set-hp.
     END-IF
     IF mo-name(n-mobj) = "BOSS"
         MOVE 1000 TO mo-hp(n-mobj)
+        MOVE 1572864 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "BOS2"
         MOVE 500 TO mo-hp(n-mobj)
+        MOVE 1572864 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "SKUL"
         MOVE 100 TO mo-hp(n-mobj)

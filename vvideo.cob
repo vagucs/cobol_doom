@@ -38,8 +38,10 @@ LINKAGE SECTION.
 01 patch PIC X(262144).
 01 patch-len BINARY-LONG.
 01 ink BINARY-LONG.
+01 place-x BINARY-LONG.
+01 place-y BINARY-LONG.
 
-PROCEDURE DIVISION USING fb patch patch-len ink.
+PROCEDURE DIVISION USING fb patch patch-len ink place-x place-y.
     MOVE 0 TO ink
     IF patch-len < 8
         GOBACK
@@ -51,8 +53,8 @@ PROCEDURE DIVISION USING fb patch patch-len ink.
     IF pw < 1 OR pw > 2048
         GOBACK
     END-IF
-    COMPUTE dx = 0 - origin-x
-    COMPUTE dy = 0 - origin-y
+    COMPUTE dx = place-x - origin-x
+    COMPUTE dy = place-y - origin-y
     PERFORM VARYING col-i FROM 0 BY 1 UNTIL col-i >= pw
         COMPUTE coff = 8 + col-i * 4
         IF coff + 3 >= patch-len

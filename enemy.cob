@@ -26,6 +26,7 @@ WORKING-STORAGE SECTION.
 01 rnd-hi PIC X(128) VALUE
     X"0b382a928ae549924d3d62c4876a3fc5c35660cb7165aaf7b57150fa6c07ffed81e24f6b70a667f118dfef78c63a3c528003b8428fe091e051cea32d3f5aa8723b219f5f1c8b7b627dc40f46c2fd360e6de24711a15dba57f48a14347bfb1a24112e34e7e84c1fdd5425d8a5d46ac5f2622b27affe91be5476debb8878a3ecf9".
 01 hear-id BINARY-LONG VALUE 0.
+01 snd-name PIC X(6).
 01 sec-mark BINARY-LONG OCCURS 256 TIMES.
 01 n-q BINARY-LONG.
 01 q-at BINARY-LONG.
@@ -35,6 +36,7 @@ WORKING-STORAGE SECTION.
 01 who-i BINARY-LONG.
 01 cls-n BINARY-LONG.
 01 spd-u BINARY-LONG.
+01 ball-name PIC X(4).
 01 li BINARY-LONG.
 01 bit-n BINARY-LONG.
 01 tmp BINARY-LONG.
@@ -97,6 +99,9 @@ WORKING-STORAGE SECTION.
 01 q-n BINARY-LONG.
 01 rem-n BINARY-LONG.
 01 dmg BINARY-LONG.
+01 atk-on BINARY-LONG.
+01 atk-x BINARY-LONG.
+01 atk-y BINARY-LONG.
 01 hurt-pl BINARY-LONG.
 01 wall-fr BINARY-LONG.
 01 ply-fr BINARY-LONG.
@@ -174,6 +179,10 @@ think-one.
         MOVE 3 TO cls-n
         MOVE 10 TO spd-u
     END-IF
+    IF mo-name(who-i) = "BOSS" OR mo-name(who-i) = "BOS2"
+        MOVE 4 TO cls-n
+        MOVE 8 TO spd-u
+    END-IF
     IF cls-n = 0
         EXIT PARAGRAPH
     END-IF
@@ -232,7 +241,51 @@ pain-one.
     PERFORM go-chase
     .
 
+cry-see.
+    MOVE SPACES TO snd-name
+    IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
+        PERFORM take-rnd
+        DIVIDE rnd-n BY 3 GIVING q-n REMAINDER rem-n
+        IF rem-n = 0
+            MOVE "posit1" TO snd-name
+        END-IF
+        IF rem-n = 1
+            MOVE "posit2" TO snd-name
+        END-IF
+        IF rem-n = 2
+            MOVE "posit3" TO snd-name
+        END-IF
+    END-IF
+    IF mo-name(who-i) = "CPOS"
+        MOVE "posit2" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "TROO"
+        PERFORM take-rnd
+        CALL "bit_and" USING BY VALUE rnd-n BY VALUE 1 RETURNING bit-n
+        IF bit-n = 0
+            MOVE "bgsit1" TO snd-name
+        ELSE
+            MOVE "bgsit2" TO snd-name
+        END-IF
+    END-IF
+    IF mo-name(who-i) = "SARG"
+        MOVE "sgtsit" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "BOSS"
+        MOVE "brssit" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "BOS2"
+        MOVE "kntsit" TO snd-name
+    END-IF
+    IF snd-name NOT = SPACES
+        CALL "sfx-play" USING snd-name
+    END-IF
+    .
+
 go-chase.
+    IF mo-ai(who-i) = 0
+        PERFORM cry-see
+    END-IF
     MOVE 2 TO mo-ai(who-i)
     MOVE 0 TO mo-wait(who-i)
     MOVE 0 TO mo-step(who-i)
@@ -266,7 +319,7 @@ chase-one.
             END-IF
         END-IF
     END-IF
-    IF cls-n = 2
+    IF cls-n = 2 OR cls-n = 4
         MOVE 2 TO mo-wait(who-i)
     ELSE
         MOVE 3 TO mo-wait(who-i)
@@ -280,7 +333,7 @@ one-chase.
         PERFORM face-dir
     END-IF
     PERFORM measure
-    IF cls-n = 2 OR cls-n = 3
+    IF cls-n = 2 OR cls-n = 3 OR cls-n = 4
         IF dist-n < 3932160
             MOVE 0 TO need-face
             PERFORM can-see
@@ -292,7 +345,7 @@ one-chase.
     END-IF
     SUBTRACT 1 FROM mo-count(who-i)
     IF mo-count(who-i) < 0
-        IF cls-n = 1 OR cls-n = 2
+        IF cls-n = 1 OR cls-n = 2 OR cls-n = 4
             PERFORM consider-shot
             IF mo-ai(who-i) = 3
                 EXIT PARAGRAPH
@@ -399,6 +452,12 @@ imp-frame.
     .
 
 zom-shot.
+    IF mo-name(who-i) = "CPOS"
+        MOVE "shotgn" TO snd-name
+    ELSE
+        MOVE "pistol" TO snd-name
+    END-IF
+    CALL "sfx-play" USING snd-name
     MOVE mo-ang(who-i) TO tmp
     PERFORM take-rnd
     MOVE rnd-n TO rnd-a
@@ -413,26 +472,64 @@ zom-shot.
 imp-fire.
     PERFORM measure
     IF cls-n = 3 OR dist-n < 4194304
+        IF cls-n = 3
+            MOVE "sgtatk" TO snd-name
+        ELSE
+            MOVE "claw" TO snd-name
+        END-IF
+        CALL "sfx-play" USING snd-name
         PERFORM take-rnd
         DIVIDE rnd-n BY 8 GIVING q-n REMAINDER rem-n
         ADD 1 TO rem-n
-        MULTIPLY rem-n BY 3 GIVING dmg
+        IF cls-n = 4
+            MULTIPLY rem-n BY 10 GIVING dmg
+        ELSE
+            MULTIPLY rem-n BY 3 GIVING dmg
+        END-IF
         PERFORM hurt-player
     ELSE
+        MOVE "BAL1" TO ball-name
+        IF cls-n = 4
+            MOVE "BAL7" TO ball-name
+        END-IF
+        IF cls-n = 4
+            MOVE "bospit" TO snd-name
+        ELSE
+            MOVE "firsht" TO snd-name
+        END-IF
+        CALL "sfx-play" USING snd-name
         PERFORM spawn-ball
     END-IF
     .
 
 hurt-player.
+    IF ply-god = 1
+        EXIT PARAGRAPH
+    END-IF
     SUBTRACT dmg FROM ply-hp
     IF ply-hp < 0
         MOVE 0 TO ply-hp
+    END-IF
+    ADD dmg TO ply-pain
+    IF ply-pain > 100
+        MOVE 100 TO ply-pain
+    END-IF
+    MOVE 0 TO atk-on
+    IF who-i >= 1 AND who-i <= n-mobj
+        MOVE 1 TO atk-on
+        MOVE mo-x(who-i) TO atk-x
+        MOVE mo-y(who-i) TO atk-y
+    END-IF
+    CALL "face-hit" USING dmg atk-on atk-x atk-y
+    CALL "ply-ouch"
+    IF atk-on = 1
+        CALL "push-ply" USING dmg atk-x atk-y
     END-IF
     MOVE 1 TO moved-out
     .
 
 spawn-ball.
-    IF n-mobj >= 256
+    IF n-mobj >= 384
         EXIT PARAGRAPH
     END-IF
     CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
@@ -446,7 +543,7 @@ spawn-ball.
         RETURNING mo-y(n-mobj)
     CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE 2097152
         RETURNING mo-z(n-mobj)
-    MOVE "BAL1" TO mo-name(n-mobj)
+    MOVE ball-name TO mo-name(n-mobj)
     MOVE 32768 TO mo-frame(n-mobj)
     MOVE 0 TO mo-flags(n-mobj)
     MOVE 4 TO mo-kind(n-mobj)
@@ -637,7 +734,7 @@ ray-player.
     .
 
 puff-at.
-    IF n-mobj >= 256
+    IF n-mobj >= 384
         EXIT PARAGRAPH
     END-IF
     CALL "fixed_mul" USING BY VALUE tdx BY VALUE wall-fr RETURNING nx
@@ -863,19 +960,20 @@ spot-free.
             IF two-side = 0
                 MOVE 0 TO step-ok
             ELSE
-                CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 1
+                CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 3
                     RETURNING bit-n
                 IF bit-n NOT = 0 OR op-bot >= op-top
                     MOVE 0 TO step-ok
                 ELSE
                     IF fs >= 1 AND fs <= n-sector
                         AND bs >= 1 AND bs <= n-sector
-                        CALL "sub_i32" USING
-                            BY VALUE sec-floor-h(fs)
-                            BY VALUE sec-floor-h(bs) RETURNING tmp
-                        CALL "abs_fixed_i" USING BY VALUE tmp
-                            RETURNING tmp
-                        IF tmp > 1572864
+                        MOVE sec-floor-h(fs) TO m1
+                        IF sec-floor-h(bs) < m1
+                            MOVE sec-floor-h(bs) TO m1
+                        END-IF
+                        CALL "sub_i32" USING BY VALUE mo-z(who-i)
+                            BY VALUE m1 RETURNING tmp
+                        IF tmp >= 1572864
                             MOVE 0 TO step-ok
                         END-IF
                     END-IF
@@ -910,9 +1008,15 @@ spot-free.
         AND sec-slot >= 1 AND sec-slot <= n-sector
         CALL "sub_i32" USING BY VALUE sec-floor-h(sec-slot)
             BY VALUE sec-floor-h(mon-sec) RETURNING tmp
-        CALL "abs_fixed_i" USING BY VALUE tmp RETURNING tmp
-        IF tmp > 1572864
-            MOVE 0 TO step-ok
+        IF tmp < 0
+            CALL "abs_fixed_i" USING BY VALUE tmp RETURNING tmp
+            IF tmp >= 1572864
+                MOVE 0 TO step-ok
+            END-IF
+        ELSE
+            IF tmp > 1572864
+                MOVE 0 TO step-ok
+            END-IF
         END-IF
     END-IF
     .
@@ -1215,3 +1319,40 @@ take-rnd.
     .
 
 END PROGRAM enemy-tic.
+
+IDENTIFICATION DIVISION.
+PROGRAM-ID. push-ply.
+
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+COPY "playstate.cpy".
+01 push-n BINARY-LONG.
+01 aim-ang BINARY-LONG.
+01 cs BINARY-LONG.
+01 sn BINARY-LONG.
+01 dx BINARY-LONG.
+01 dy BINARY-LONG.
+
+LINKAGE SECTION.
+01 hit-n BINARY-LONG.
+01 src-x BINARY-LONG.
+01 src-y BINARY-LONG.
+
+PROCEDURE DIVISION USING hit-n src-x src-y.
+    IF hit-n <= 0
+        GOBACK
+    END-IF
+    MULTIPLY hit-n BY 8192 GIVING push-n
+    CALL "point_to_angle" USING
+        BY VALUE src-x BY VALUE src-y
+        BY VALUE ply-x BY VALUE ply-y
+        RETURNING aim-ang
+    CALL "fine_cos_ang" USING BY VALUE aim-ang RETURNING cs
+    CALL "fine_sin_ang" USING BY VALUE aim-ang RETURNING sn
+    CALL "fixed_mul" USING BY VALUE push-n BY VALUE cs RETURNING dx
+    CALL "fixed_mul" USING BY VALUE push-n BY VALUE sn RETURNING dy
+    CALL "add_i32" USING BY VALUE ply-momx BY VALUE dx RETURNING ply-momx
+    CALL "add_i32" USING BY VALUE ply-momy BY VALUE dy RETURNING ply-momy
+    GOBACK.
+
+END PROGRAM push-ply.

@@ -57,8 +57,15 @@ PROCEDURE DIVISION USING name-out-lnk lines-out verts-out rc.
     MOVE 0 TO n-vertex n-sector n-side n-line n-seg n-ssector n-node
     MOVE 0 TO n-thing n-block reject-n pool-n
     MOVE SPACES TO map-name
-    MOVE "MAP01" TO seek-name
-    CALL "wad-find" USING seek-name map-id
+    MOVE -1 TO map-id
+    IF name-out-lnk NOT = SPACES
+        MOVE name-out-lnk TO seek-name
+        CALL "wad-find" USING seek-name map-id
+    END-IF
+    IF map-id < 0
+        MOVE "MAP01" TO seek-name
+        CALL "wad-find" USING seek-name map-id
+    END-IF
     IF map-id < 0
         MOVE "E1M1" TO seek-name
         CALL "wad-find" USING seek-name map-id
@@ -93,7 +100,7 @@ load-vertexes.
     MOVE 4 TO lump-delta
     PERFORM read-at
     COMPUTE n-vertex = lump-len / 4
-    IF n-vertex > 1024
+    IF n-vertex > 1104
         MOVE "vertices demais" TO reason
         PERFORM fail-map
     END-IF
@@ -191,7 +198,7 @@ load-lines.
     MOVE 2 TO lump-delta
     PERFORM read-at
     COMPUTE n-line = lump-len / 14
-    IF n-line > 1024
+    IF n-line > 1104
         MOVE "linhas demais" TO reason
         PERFORM fail-map
     END-IF
@@ -419,7 +426,7 @@ load-blockmap.
     MOVE 10 TO lump-delta
     PERFORM read-at
     COMPUTE n-block = lump-len / 2
-    IF n-block > 8192
+    IF n-block > 12288
         MOVE "blockmap demais" TO reason
         PERFORM fail-map
     END-IF
@@ -443,7 +450,7 @@ load-blockmap.
 load-reject.
     MOVE 9 TO lump-delta
     PERFORM read-at
-    IF lump-len > 4096
+    IF lump-len > 8192
         MOVE "reject demais" TO reason
         PERFORM fail-map
     END-IF

@@ -46,6 +46,10 @@ COPY "playstate.cpy".
 01 flat-have BINARY-LONG VALUE -1.
 01 view-w BINARY-LONG.
 01 view-h BINARY-LONG.
+01 view-ox BINARY-LONG VALUE 0.
+01 view-oy BINARY-LONG VALUE 0.
+01 sized-n BINARY-LONG VALUE 0.
+01 gun-clip BINARY-LONG VALUE 0.
 01 center-x BINARY-LONG.
 01 center-y BINARY-LONG.
 01 center-xf BINARY-LONG.
@@ -80,6 +84,8 @@ COPY "playstate.cpy".
 01 rw-ang1 BINARY-LONG.
 01 rw-center BINARY-LONG.
 01 rw-mid BINARY-LONG.
+01 rw-mask BINARY-LONG.
+01 mask-id BINARY-LONG.
 01 rw-topm BINARY-LONG.
 01 rw-botm BINARY-LONG.
 01 mid-tex BINARY-LONG.
@@ -158,6 +164,7 @@ COPY "playstate.cpy".
 01 dst BINARY-LONG.
 01 k BINARY-LONG.
 01 i BINARY-LONG.
+01 hold-keep BINARY-LONG.
 01 j BINARY-LONG.
 01 bit-n BINARY-LONG.
 01 node-slot BINARY-LONG.
@@ -173,6 +180,7 @@ COPY "playstate.cpy".
 01 span-top BINARY-LONG.
 01 span-bot BINARY-LONG.
 01 clip-top BINARY-LONG.
+01 clip-bot BINARY-LONG.
 01 vp-at BINARY-LONG.
 01 pl-i BINARY-LONG.
 01 pl-out BINARY-LONG.
@@ -238,8 +246,14 @@ COPY "playstate.cpy".
 01 ds-mask BINARY-LONG OCCURS 128 TIMES.
 01 ds-c0 BINARY-LONG OCCURS 128 TIMES.
 01 ds-nclip BINARY-LONG OCCURS 128 TIMES.
+01 ds-mtex BINARY-LONG OCCURS 128 TIMES.
+01 ds-mmid BINARY-LONG OCCURS 128 TIMES.
 01 ds-top BINARY-LONG OCCURS 8192 TIMES.
 01 ds-bot BINARY-LONG OCCURS 8192 TIMES.
+01 ds-mcol BINARY-LONG OCCURS 8192 TIMES.
+01 ds-mlit BINARY-LONG OCCURS 8192 TIMES.
+01 mhold-col BINARY-LONG OCCURS 320 TIMES.
+01 mhold-lit BINARY-LONG OCCURS 320 TIMES.
 01 n-vis BINARY-LONG.
 01 vis-ord BINARY-LONG OCCURS 128 TIMES.
 01 vis-sc BINARY-LONG OCCURS 128 TIMES.
@@ -255,6 +269,8 @@ COPY "playstate.cpy".
 01 vis-sfrac BINARY-LONG OCCURS 128 TIMES.
 01 vis-w BINARY-LONG OCCURS 128 TIMES.
 01 vis-lump BINARY-LONG OCCURS 128 TIMES.
+01 vis-fuzz BINARY-LONG OCCURS 128 TIMES.
+01 fuzz-on BINARY-LONG.
 01 ctop BINARY-LONG OCCURS 320 TIMES.
 01 cbot BINARY-LONG OCCURS 320 TIMES.
 01 patch-buf PIC X(65536).
@@ -326,22 +342,15 @@ main-view.
             BY VALUE 4096
         CALL "build_tantoangle" USING BY REFERENCE tantoangle(1)
             BY VALUE 2049
-        MOVE 320 TO view-w
-        MOVE 168 TO view-h
-        MOVE 160 TO center-x
-        MOVE 84 TO center-y
-        CALL "fixed_from_i16" USING BY VALUE center-x RETURNING center-xf
-        CALL "fixed_from_i16" USING BY VALUE center-y RETURNING center-yf
-        CALL "shar32" USING BY VALUE center-yf BY VALUE 4 RETURNING cy4
         MOVE 1073741824 TO ang-90
         CALL "k_ang180" RETURNING ang-180
         MOVE -1073741824 TO ang-270
         MOVE 0 TO extra-l
-        PERFORM init-mapping
         PERFORM init-lights
-        PERFORM init-slopes
+        MOVE 0 TO sized-n
         MOVE 1 TO tables-on
     END-IF
+    PERFORM apply-size
     IF ply-tic = 0
         MOVE 0 TO ink
     END-IF
@@ -371,15 +380,85 @@ main-view.
         MOVE 0 TO ply-dvh
         MOVE 0 TO ply-tic
         MOVE 0 TO ply-turn
+        MOVE ply-keep TO hold-keep
+        IF ply-keep = 0
         MOVE 50 TO ply-ammo
         MOVE 100 TO ply-hp
         MOVE 0 TO ply-shot
+        MOVE 0 TO ply-armor
+        MOVE 0 TO ply-shell
+        MOVE 0 TO ply-cell
+        MOVE 0 TO ply-misl
+        MOVE 200 TO ply-maxc
+        MOVE 50 TO ply-maxs
+        MOVE 300 TO ply-maxe
+        MOVE 50 TO ply-maxr
+        MOVE 0 TO ply-pack
+        MOVE 0 TO ply-sg
+        MOVE 0 TO ply-cg
+        MOVE 0 TO ply-rl
+        MOVE 0 TO ply-pg
+        MOVE 0 TO ply-bf
+        MOVE 0 TO ply-saw
+        MOVE 0 TO ply-k0
+        MOVE 0 TO ply-k1
+        MOVE 0 TO ply-k2
+        MOVE 0 TO ply-k3
+        MOVE 0 TO ply-k4
+        MOVE 0 TO ply-k5
+        MOVE 0 TO ply-exit
+        MOVE 0 TO ply-atype
+        MOVE 0 TO ply-time
+        MOVE 0 TO ply-pain
+        MOVE 100 TO ply-oldh
+        MOVE 0 TO ply-fwait
+        MOVE 0 TO ply-fkind
         MOVE "PISGA0" TO gun-body
         MOVE SPACES TO gun-flash
         MOVE 0 TO gun-mode
+        MOVE 0 TO gun-lift
+        MOVE 2 TO ply-weap
+        MOVE 0 TO ply-pend
+        END-IF
+        MOVE 0 TO ply-keep
+        MOVE 0 TO ply-exit
+        MOVE 0 TO ply-time
+        MOVE 0 TO ply-pain
+        MOVE 0 TO ply-fwait
+        MOVE 0 TO ply-fkind
+        MOVE 0 TO gun-mode
+        MOVE 0 TO gun-lift
+        MOVE SPACES TO gun-flash
+        IF hold-keep = 1
+            IF ply-weap = 1
+                MOVE "PUNGA0" TO gun-body
+            END-IF
+            IF ply-weap = 2 OR ply-weap = 0
+                MOVE "PISGA0" TO gun-body
+            END-IF
+            IF ply-weap = 3
+                MOVE "SHTGA0" TO gun-body
+            END-IF
+            IF ply-weap = 4
+                MOVE "CHGGA0" TO gun-body
+            END-IF
+            IF ply-weap = 5
+                MOVE "MISGA0" TO gun-body
+            END-IF
+            IF ply-weap = 6
+                MOVE "PLSGA0" TO gun-body
+            END-IF
+            IF ply-weap = 7
+                MOVE "BFGGA0" TO gun-body
+            END-IF
+            IF ply-weap = 8
+                MOVE "SAWGA0" TO gun-body
+            END-IF
+        END-IF
         MOVE ply-x TO view-x
         MOVE ply-y TO view-y
         PERFORM point-in-sub
+        MOVE sec-slot TO ply-room
         MOVE sec-floor-h(sec-slot) TO ply-floor
         MOVE sec-ceil-h(sec-slot) TO ply-ceil
         MOVE ply-floor TO ply-z
@@ -398,6 +477,7 @@ main-view.
     PERFORM draw-planes
     PERFORM draw-things
     PERFORM draw-weapon
+    CALL "status-draw" USING fb
     IF ply-tic = 0
         PERFORM VARYING at-pos FROM 0 BY 1 UNTIL at-pos >= 64000
             CALL "byte_at" USING BY REFERENCE fb BY VALUE at-pos
@@ -407,6 +487,45 @@ main-view.
             END-IF
         END-PERFORM
     END-IF
+    .
+
+apply-size.
+    IF ply-blocks < 3
+        MOVE 10 TO ply-blocks
+    END-IF
+    IF ply-blocks > 11
+        MOVE 11 TO ply-blocks
+    END-IF
+    IF ply-blocks = sized-n
+        EXIT PARAGRAPH
+    END-IF
+    MOVE ply-blocks TO sized-n
+    IF ply-blocks >= 11
+        MOVE 320 TO view-w
+        MOVE 200 TO view-h
+        MOVE 0 TO view-ox
+        MOVE 0 TO view-oy
+    ELSE
+        COMPUTE view-w = ply-blocks * 32
+        COMPUTE view-h = ply-blocks * 168 / 10
+        COMPUTE view-h = view-h - FUNCTION MOD(view-h, 8)
+        IF view-h < 32
+            MOVE 32 TO view-h
+        END-IF
+        COMPUTE view-ox = (320 - view-w) / 2
+        IF view-w >= 320
+            MOVE 0 TO view-oy
+        ELSE
+            COMPUTE view-oy = (168 - view-h) / 2
+        END-IF
+    END-IF
+    COMPUTE center-x = view-w / 2
+    COMPUTE center-y = view-h / 2
+    CALL "fixed_from_i16" USING BY VALUE center-x RETURNING center-xf
+    CALL "fixed_from_i16" USING BY VALUE center-y RETURNING center-yf
+    CALL "shar32" USING BY VALUE center-yf BY VALUE 4 RETURNING cy4
+    PERFORM init-mapping
+    PERFORM init-slopes
     .
 
 init-mapping.
@@ -1173,6 +1292,32 @@ store-wall.
         END-IF
         IF sd-slot >= 1 AND sd-mid(sd-slot) NOT = 0
             MOVE 1 TO masked-tex
+            MOVE sd-mid(sd-slot) TO mask-id
+            MOVE mask-id TO tex-id
+            PERFORM tex-height
+            CALL "bit_and" USING BY VALUE flag-n BY VALUE 16
+                RETURNING bit-n
+            IF bit-n NOT = 0
+                IF sec-floor-h(front-sec) > sec-floor-h(back-sec)
+                    MOVE sec-floor-h(front-sec) TO tmp
+                ELSE
+                    MOVE sec-floor-h(back-sec) TO tmp
+                END-IF
+                CALL "add_i32" USING BY VALUE tmp BY VALUE th-out
+                    RETURNING tmp
+                CALL "sub_i32" USING BY VALUE tmp BY VALUE view-z
+                    RETURNING rw-mask
+            ELSE
+                IF sec-ceil-h(front-sec) < sec-ceil-h(back-sec)
+                    MOVE sec-ceil-h(front-sec) TO tmp
+                ELSE
+                    MOVE sec-ceil-h(back-sec) TO tmp
+                END-IF
+                CALL "sub_i32" USING BY VALUE tmp BY VALUE view-z
+                    RETURNING rw-mask
+            END-IF
+            CALL "add_i32" USING BY VALUE rw-mask BY VALUE row-off
+                RETURNING rw-mask
         END-IF
     END-IF
     IF mid-tex NOT = 0 OR top-tex NOT = 0 OR bot-tex NOT = 0
@@ -1365,6 +1510,11 @@ render-cols.
                 END-IF
             END-IF
         END-IF
+        IF masked-tex = 1
+            COMPUTE peek = rw-x + 1
+            MOVE tex-col TO mhold-col(peek)
+            MOVE dc-map TO mhold-lit(peek)
+        END-IF
         CALL "add_i32" USING BY VALUE rw-scale BY VALUE rw-step
             RETURNING rw-scale
         CALL "add_i32" USING BY VALUE top-frac BY VALUE top-step
@@ -1430,7 +1580,7 @@ draw-column.
         IF y-i < 0 OR y-i >= 200
             EXIT PERFORM
         END-IF
-        COMPUTE dest-at = y-i * 320 + dc-x
+        COMPUTE dest-at = (y-i + view-oy) * 320 + dc-x + view-ox
         IF dest-at < 0 OR dest-at >= 64000
             EXIT PERFORM
         END-IF
@@ -1442,6 +1592,48 @@ draw-column.
             RETURNING byte-n
         CALL "poke_byte" USING BY REFERENCE fb BY VALUE dest-at
             BY VALUE byte-n
+        CALL "add_i32" USING BY VALUE frac BY VALUE dc-step RETURNING frac
+        ADD 1 TO y-i
+        SUBTRACT 1 FROM count-n
+    END-PERFORM
+    .
+
+draw-hole.
+    IF dc-x < 0 OR dc-x >= view-w
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE count-n = dc-yh - dc-yl
+    IF count-n < 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE dc-yl TO y-i
+    IF y-i < 0
+        MOVE 0 TO y-i
+    END-IF
+    IF y-i > 199
+        MOVE 199 TO y-i
+    END-IF
+    COMPUTE prod = dc-yl - center-y
+    CALL "mul_i32" USING BY VALUE prod BY VALUE dc-step RETURNING prod
+    CALL "add_i32" USING BY VALUE dc-mid BY VALUE prod RETURNING frac
+    PERFORM UNTIL count-n < 0
+        IF y-i < 0 OR y-i >= 200
+            EXIT PERFORM
+        END-IF
+        COMPUTE dest-at = (y-i + view-oy) * 320 + dc-x + view-ox
+        IF dest-at < 0 OR dest-at >= 64000
+            EXIT PERFORM
+        END-IF
+        CALL "ushr_i" USING BY VALUE frac BY VALUE 16 RETURNING idx
+        CALL "bit_and" USING BY VALUE idx BY VALUE 127 RETURNING idx
+        CALL "byte_at" USING BY REFERENCE dc-src BY VALUE idx RETURNING pix
+        IF pix NOT = 0
+            COMPUTE at-pos = dc-map * 256 + pix
+            CALL "byte_at" USING BY REFERENCE cmap-buf BY VALUE at-pos
+                RETURNING byte-n
+            CALL "poke_byte" USING BY REFERENCE fb BY VALUE dest-at
+                BY VALUE byte-n
+        END-IF
         CALL "add_i32" USING BY VALUE frac BY VALUE dc-step RETURNING frac
         ADD 1 TO y-i
         SUBTRACT 1 FROM count-n
@@ -1571,7 +1763,7 @@ draw-flat.
                 COMPUTE at-pos = dc-map * 256 + byte-n
                 CALL "byte_at" USING BY REFERENCE cmap-buf BY VALUE at-pos
                     RETURNING prod
-                COMPUTE dest-at = y-i * 320 + x-i
+                COMPUTE dest-at = (y-i + view-oy) * 320 + x-i + view-ox
                 CALL "poke_byte" USING BY REFERENCE fb BY VALUE dest-at
                     BY VALUE prod
             END-PERFORM
@@ -1743,6 +1935,12 @@ push-drawseg.
         RETURNING ds-sc2(n-ds)
     MOVE cur-seg TO ds-seg(n-ds)
     MOVE masked-tex TO ds-mask(n-ds)
+    IF masked-tex = 1
+        MOVE mask-id TO ds-mtex(n-ds)
+        MOVE rw-mask TO ds-mmid(n-ds)
+    ELSE
+        MOVE 0 TO ds-mtex(n-ds)
+    END-IF
     COMPUTE sh = rng-b - rng-a + 1
     IF sh < 1
         MOVE 0 TO sh
@@ -1810,10 +2008,155 @@ push-drawseg.
                 AND peek >= 1 AND peek <= 320
                 MOVE ceil-clip(peek) TO ds-top(slot)
                 MOVE floor-clip(peek) TO ds-bot(slot)
+                MOVE mhold-col(peek) TO ds-mcol(slot)
+                MOVE mhold-lit(peek) TO ds-mlit(slot)
             END-IF
         END-PERFORM
     END-IF
     ADD sh TO ds-pool
+    .
+
+draw-masks.
+    PERFORM VARYING di FROM n-ds BY -1 UNTIL di < 1
+        IF ds-mask(di) = 1 AND ds-mtex(di) NOT = 0
+            MOVE ds-x1(di) TO r1
+            MOVE ds-x2(di) TO r2
+            PERFORM paint-mask
+        END-IF
+    END-PERFORM
+    .
+
+masks-behind.
+    MOVE vis-x1(vis-k) TO left-v
+    MOVE vis-x2(vis-k) TO right-v
+    MOVE vis-sc(vis-k) TO hi-sc
+    PERFORM VARYING di FROM n-ds BY -1 UNTIL di < 1
+        IF ds-mask(di) = 1 AND ds-mtex(di) NOT = 0
+            PERFORM mask-if-behind
+        END-IF
+    END-PERFORM
+    .
+
+mask-if-behind.
+    IF ds-x2(di) < left-v OR ds-x1(di) > right-v
+        EXIT PARAGRAPH
+    END-IF
+    MOVE left-v TO r1
+    IF ds-x1(di) > r1
+        MOVE ds-x1(di) TO r1
+    END-IF
+    MOVE right-v TO r2
+    IF ds-x2(di) < r2
+        MOVE ds-x2(di) TO r2
+    END-IF
+    MOVE r1 TO x-i
+    PERFORM seg-scale
+    MOVE cur-sc TO lo-sc
+    MOVE r2 TO x-i
+    PERFORM seg-scale
+    IF cur-sc > lo-sc
+        MOVE cur-sc TO lo-sc
+    END-IF
+    IF lo-sc < hi-sc
+        PERFORM paint-mask
+    END-IF
+    .
+
+paint-mask.
+    MOVE ds-mtex(di) TO tex-id
+    MOVE ds-mmid(di) TO dc-mid
+    MOVE r1 TO x-i
+    PERFORM UNTIL x-i > r2
+        COMPUTE slot = ds-c0(di) + x-i - ds-x1(di)
+        IF slot >= 1 AND slot <= 8192
+            AND x-i >= 0 AND x-i < view-w
+            AND ds-mlit(slot) >= 0
+            MOVE ds-mcol(slot) TO col-n
+            MOVE ds-mlit(slot) TO dc-map
+            MOVE x-i TO dc-x
+            PERFORM seg-scale
+            IF cur-sc > 0
+                CALL "udiv_u32" USING BY VALUE -1 BY VALUE cur-sc
+                    RETURNING dc-step
+                CALL "fixed_mul" USING BY VALUE dc-mid BY VALUE cur-sc
+                    RETURNING tmp
+                CALL "sub_i32" USING BY VALUE center-yf BY VALUE tmp
+                    RETURNING cur-gzt
+                PERFORM fetch-column
+                PERFORM mask-runs
+                MOVE -1 TO ds-mlit(slot)
+            END-IF
+        END-IF
+        ADD 1 TO x-i
+    END-PERFORM
+    .
+
+seg-scale.
+    IF ds-x2(di) <= ds-x1(di)
+        MOVE ds-sc1(di) TO cur-sc
+    ELSE
+        CALL "sub_i32" USING BY VALUE ds-sc2(di)
+            BY VALUE ds-sc1(di) RETURNING tmp
+        COMPUTE sh = x-i - ds-x1(di)
+        CALL "mul_i32" USING BY VALUE tmp BY VALUE sh RETURNING tmp
+        COMPUTE sh = ds-x2(di) - ds-x1(di)
+        CALL "floor_div_i" USING BY VALUE tmp BY VALUE sh RETURNING tmp
+        CALL "add_i32" USING BY VALUE ds-sc1(di) BY VALUE tmp
+            RETURNING cur-sc
+    END-IF
+    .
+
+mask-runs.
+    MOVE 0 TO top-d
+    PERFORM UNTIL top-d >= 128
+        CALL "byte_at" USING BY REFERENCE dc-src BY VALUE top-d
+            RETURNING pix
+        IF pix = 0
+            ADD 1 TO top-d
+        ELSE
+            MOVE top-d TO src-at
+            MOVE 0 TO post-len
+            PERFORM UNTIL top-d >= 128
+                CALL "byte_at" USING BY REFERENCE dc-src BY VALUE top-d
+                    RETURNING pix
+                IF pix = 0
+                    EXIT PERFORM
+                END-IF
+                ADD 1 TO post-len
+                ADD 1 TO top-d
+            END-PERFORM
+            PERFORM mask-run
+        END-IF
+    END-PERFORM
+    .
+
+mask-run.
+    CALL "mul_i32" USING BY VALUE cur-sc BY VALUE src-at RETURNING tmp
+    CALL "add_i32" USING BY VALUE cur-gzt BY VALUE tmp RETURNING num-v
+    CALL "add_i32" USING BY VALUE num-v BY VALUE 65535 RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 16 RETURNING yl
+    CALL "mul_i32" USING BY VALUE cur-sc BY VALUE post-len RETURNING tmp
+    CALL "add_i32" USING BY VALUE num-v BY VALUE tmp RETURNING tmp
+    CALL "sub_i32" USING BY VALUE tmp BY VALUE 1 RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 16 RETURNING yh
+    COMPUTE clip-top = ds-top(slot) + 1
+    COMPUTE clip-bot = ds-bot(slot) - 1
+    IF yl < clip-top
+        MOVE clip-top TO yl
+    END-IF
+    IF yh > clip-bot
+        MOVE clip-bot TO yh
+    END-IF
+    IF yl < 0
+        MOVE 0 TO yl
+    END-IF
+    COMPUTE tmp = view-h - 1
+    IF yh > tmp
+        MOVE tmp TO yh
+    END-IF
+    MOVE yl TO dc-yl
+    MOVE yh TO dc-yh
+    PERFORM draw-hole
     .
 
 draw-things.
@@ -1826,14 +2169,18 @@ draw-things.
     PERFORM sort-vis
     PERFORM VARYING mo-i FROM 1 BY 1 UNTIL mo-i > n-vis
         MOVE vis-ord(mo-i) TO vis-k
+        PERFORM masks-behind
         PERFORM paint-sprite
     END-PERFORM
+    PERFORM draw-masks
     .
 
 weapon-origin.
-    IF ply-bob = 0 OR gun-mode = 1
+    IF ply-bob = 0 OR gun-mode NOT = 0
         MOVE 65536 TO gun-sx
         CALL "fixed_from_i16" USING BY VALUE 32 RETURNING sy-v
+        CALL "add_i32" USING BY VALUE sy-v BY VALUE gun-lift
+            RETURNING sy-v
         EXIT PARAGRAPH
     END-IF
     COMPUTE tmp = ply-tic * 128
@@ -1850,6 +2197,7 @@ weapon-origin.
         RETURNING tmp
     CALL "fixed_from_i16" USING BY VALUE 32 RETURNING sy-v
     CALL "add_i32" USING BY VALUE sy-v BY VALUE tmp RETURNING sy-v
+    CALL "add_i32" USING BY VALUE sy-v BY VALUE gun-lift RETURNING sy-v
     .
 
 draw-weapon.
@@ -1857,32 +2205,35 @@ draw-weapon.
         EXIT PARAGRAPH
     END-IF
     PERFORM weapon-origin
-    IF gun-body = "PISGA0" OR gun-body = "PISGB0" OR gun-body = "PISGC0"
-        MOVE gun-body TO gun-name
-    ELSE
-        MOVE "PISGA0" TO gun-name
+    IF gun-body = SPACES OR gun-body = LOW-VALUES
+        MOVE "PISGA0" TO gun-body
     END-IF
+    MOVE gun-body TO gun-name
     PERFORM paint-gun
-    IF gun-flash = "PISFA0"
+    IF gun-flash NOT = SPACES AND gun-flash NOT = LOW-VALUES
         MOVE gun-flash TO gun-name
         PERFORM paint-gun
     END-IF
     .
 
 paint-gun.
+    MOVE 1 TO gun-clip
     CALL "wad-find" USING gun-name cur-lump
     IF cur-lump < 0
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
     MOVE 65536 TO cap-n
     CALL "wad-read-num" USING cur-lump patch-buf cap-n patch-len
     IF patch-len < 8
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
     CALL "i16_le" USING BY REFERENCE patch-buf BY VALUE 0 RETURNING spr-w
     CALL "i16_le" USING BY REFERENCE patch-buf BY VALUE 4 RETURNING spr-left
     CALL "i16_le" USING BY REFERENCE patch-buf BY VALUE 6 RETURNING spr-top
     IF spr-w < 1
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
     MOVE gun-sx TO tx-v
@@ -1890,18 +2241,25 @@ paint-gun.
     CALL "sub_i32" USING BY VALUE tx-v BY VALUE tmp RETURNING tx-v
     CALL "fixed_from_i16" USING BY VALUE spr-left RETURNING adj-v
     CALL "sub_i32" USING BY VALUE tx-v BY VALUE adj-v RETURNING tx-v
-    CALL "fixed_mul" USING BY VALUE tx-v BY VALUE 65536 RETURNING tmp
+    COMPUTE cur-sc = view-w * 65536 / 320
+    IF cur-sc < 1
+        MOVE 1 TO cur-sc
+    END-IF
+    COMPUTE cur-xis = 320 * 65536 / view-w
+    CALL "fixed_mul" USING BY VALUE tx-v BY VALUE cur-sc RETURNING tmp
     CALL "add_shr16" USING BY VALUE center-xf BY VALUE tmp RETURNING x1
     IF x1 > view-w
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
     MOVE x1 TO cur-x0
     CALL "fixed_from_i16" USING BY VALUE spr-w RETURNING adj-v
     CALL "add_i32" USING BY VALUE tx-v BY VALUE adj-v RETURNING tx-v
-    CALL "fixed_mul" USING BY VALUE tx-v BY VALUE 65536 RETURNING tmp
+    CALL "fixed_mul" USING BY VALUE tx-v BY VALUE cur-sc RETURNING tmp
     CALL "add_shr16" USING BY VALUE center-xf BY VALUE tmp RETURNING x2
     CALL "sub_i32" USING BY VALUE x2 BY VALUE 1 RETURNING x2
     IF x2 < 0
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
     IF x1 < 0
@@ -1916,11 +2274,10 @@ paint-gun.
         MOVE x2 TO cur-x2
     END-IF
     IF cur-x1 > cur-x2
+        MOVE 0 TO gun-clip
         EXIT PARAGRAPH
     END-IF
-    MOVE 65536 TO cur-xis
     MOVE 0 TO cur-sfrac
-    MOVE 65536 TO cur-sc
     MOVE spr-w TO cur-w
     CALL "fixed_from_i16" USING BY VALUE spr-top RETURNING tmp
     CALL "sub_i32" USING BY VALUE sy-v BY VALUE tmp RETURNING tmp
@@ -1929,9 +2286,14 @@ paint-gun.
     PERFORM VARYING x-i FROM cur-x1 BY 1 UNTIL x-i > cur-x2
         COMPUTE peek = x-i + 1
         MOVE -1 TO ctop(peek)
-        MOVE view-h TO cbot(peek)
+        IF view-w < 320
+            MOVE view-h TO cbot(peek)
+        ELSE
+            COMPUTE cbot(peek) = 200 - view-oy
+        END-IF
     END-PERFORM
     PERFORM paint-span
+    MOVE 0 TO gun-clip
     .
 
 project-thing.
@@ -2049,6 +2411,12 @@ project-thing.
     MOVE cur-sfrac TO vis-sfrac(n-vis)
     MOVE spr-w TO vis-w(n-vis)
     MOVE cur-lump TO vis-lump(n-vis)
+    MOVE 0 TO vis-fuzz(n-vis)
+    CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 262144
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        MOVE 1 TO vis-fuzz(n-vis)
+    END-IF
     .
 
 sort-vis.
@@ -2085,6 +2453,7 @@ paint-sprite.
     MOVE vis-sfrac(vis-k) TO cur-sfrac
     MOVE vis-w(vis-k) TO cur-w
     MOVE vis-lump(vis-k) TO cur-lump
+    MOVE vis-fuzz(vis-k) TO fuzz-on
     MOVE 65536 TO cap-n
     CALL "wad-read-num" USING cur-lump patch-buf cap-n patch-len
     IF patch-len < 8
@@ -2288,8 +2657,13 @@ paint-column.
         IF yl < 0
             MOVE 0 TO yl
         END-IF
-        IF yh >= view-h
-            COMPUTE yh = view-h - 1
+        IF gun-clip = 1 AND view-w >= 320
+            COMPUTE tmp = 199 - view-oy
+        ELSE
+            COMPUTE tmp = view-h - 1
+        END-IF
+        IF yh > tmp
+            MOVE tmp TO yh
         END-IF
         IF yl <= yh
             CALL "spr_texfrac" USING BY VALUE center-yf BY VALUE cur-mid
@@ -2301,15 +2675,25 @@ paint-column.
             PERFORM VARYING y-i FROM yl BY 1 UNTIL y-i > yh
                 CALL "shar32" USING BY VALUE frac BY VALUE 16 RETURNING idx
                 IF idx >= 0 AND idx < post-len
-                    COMPUTE dest-at = src-at + idx
-                    IF dest-at >= 0 AND dest-at < patch-len
-                        CALL "byte_at" USING BY REFERENCE patch-buf
-                            BY VALUE dest-at RETURNING pix
-                        CALL "byte_at" USING BY REFERENCE cmap-buf
-                            BY VALUE pix RETURNING byte-n
-                        COMPUTE at-pos = y-i * 320 + x-i
-                        CALL "poke_byte" USING BY REFERENCE fb
-                            BY VALUE at-pos BY VALUE byte-n
+                    COMPUTE at-pos = (y-i + view-oy) * 320 + x-i + view-ox
+                    IF fuzz-on = 1
+                        IF y-i > 0
+                            COMPUTE dest-at = at-pos - 320
+                            CALL "byte_at" USING BY REFERENCE fb
+                                BY VALUE dest-at RETURNING byte-n
+                            CALL "poke_byte" USING BY REFERENCE fb
+                                BY VALUE at-pos BY VALUE byte-n
+                        END-IF
+                    ELSE
+                        COMPUTE dest-at = src-at + idx
+                        IF dest-at >= 0 AND dest-at < patch-len
+                            CALL "byte_at" USING BY REFERENCE patch-buf
+                                BY VALUE dest-at RETURNING pix
+                            CALL "byte_at" USING BY REFERENCE cmap-buf
+                                BY VALUE pix RETURNING byte-n
+                            CALL "poke_byte" USING BY REFERENCE fb
+                                BY VALUE at-pos BY VALUE byte-n
+                        END-IF
                     END-IF
                 END-IF
                 CALL "add_i32" USING BY VALUE frac BY VALUE y-is

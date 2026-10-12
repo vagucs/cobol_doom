@@ -9,8 +9,8 @@
 *>
 *> www.vagucs.com.br
 *>
-*> Entrada. Confere o ponto fixo, le o IWAD e desenha a vista 3D do E1M1.
-*> Setas ou WASD andam. Espaco ou E abre a porta. Ctrl dispara. Os monstros reagem. Sem rato.
+*> Entrada. Confere o ponto fixo, le o IWAD e desenha a vista 3D.
+*> Setas andam. Espaco ou E abre a porta. Ctrl dispara. A saida abre o mapa seguinte. Sem rato.
 IDENTIFICATION DIVISION.
 PROGRAM-ID. doom.
 
@@ -28,6 +28,13 @@ WORKING-STORAGE SECTION.
 01 n-tex BINARY-LONG.
 01 n-flat BINARY-LONG.
 01 map-name PIC X(8).
+01 prev-map PIC X(8).
+01 want-map PIC X(8).
+01 ep-c PIC X.
+01 mp-c PIC X.
+01 map-num BINARY-LONG.
+01 tens-n BINARY-LONG.
+01 ones-n BINARY-LONG.
 01 cmd-line PIC X(260).
 01 want PIC X(260).
 01 found PIC X(260).
@@ -39,6 +46,7 @@ WORKING-STORAGE SECTION.
 01 fb PIC X(64000).
 01 pal PIC X(16384).
 COPY "playstate.cpy".
+COPY "sprstate.cpy".
 01 k-up BINARY-LONG.
 01 k-down BINARY-LONG.
 01 k-left BINARY-LONG.
@@ -55,6 +63,12 @@ COPY "playstate.cpy".
 01 gun-busy BINARY-LONG VALUE 0.
 01 gun-drew BINARY-LONG VALUE 0.
 01 foe-drew BINARY-LONG VALUE 0.
+01 floor-hurt BINARY-LONG VALUE 0.
+01 cheat-drew BINARY-LONG VALUE 0.
+01 typed-n BINARY-LONG.
+01 pain-pal BINARY-LONG.
+01 pal-at BINARY-LONG.
+01 pal-now PIC X(768).
 01 act-mode BINARY-LONG.
 01 moving BINARY-LONG.
 01 draw-now BINARY-LONG.
@@ -62,6 +76,23 @@ COPY "playstate.cpy".
 01 tic-n BINARY-LONG.
 01 tic-i BINARY-LONG.
 01 key-n BINARY-LONG.
+01 mode-n BINARY-LONG VALUE 0.
+01 pick-n BINARY-LONG VALUE 0.
+01 skull-n BINARY-LONG VALUE 0.
+01 skull-wait BINARY-LONG VALUE 8.
+01 live-n BINARY-LONG VALUE 0.
+01 boot-map PIC X(8).
+01 show-k BINARY-LONG VALUE 0.
+01 show-i BINARY-LONG VALUE 0.
+01 show-s BINARY-LONG VALUE 0.
+01 show-t BINARY-LONG VALUE 0.
+01 goal-k BINARY-LONG VALUE 0.
+01 goal-i BINARY-LONG VALUE 0.
+01 goal-s BINARY-LONG VALUE 0.
+01 goal-t BINARY-LONG VALUE 0.
+01 wipe-done BINARY-LONG VALUE 0.
+01 wipe-cmd BINARY-LONG VALUE 0.
+01 size-was BINARY-LONG VALUE 0.
 01 now-ms BINARY-LONG.
 01 last-ms BINARY-LONG VALUE 0.
 01 wait-ms BINARY-LONG.
@@ -113,6 +144,8 @@ PROCEDURE DIVISION.
         DISPLAY "mapa nao carregou " rc
         STOP RUN RETURNING rc
     END-IF
+    MOVE 10 TO ply-blocks
+    MOVE 2 TO ply-scale
     CALL "view-frame" USING fb ink
     IF ink < 1000
         DISPLAY "vista vazia " ink
@@ -125,7 +158,13 @@ PROCEDURE DIVISION.
         CALL "video_shutdown"
         STOP RUN RETURNING rc
     END-IF
-    CALL "video_upload" USING fb pal
+    CALL "audio_init" RETURNING rc
+    CALL "mus-title"
+    MOVE map-name TO boot-map
+    MOVE 0 TO mode-n
+    MOVE 0 TO pick-n
+    MOVE 0 TO live-n
+    PERFORM draw-front
     MOVE lump-n TO show-lumps
     MOVE n-lines TO show-lines
     MOVE n-verts TO show-verts
@@ -139,8 +178,43 @@ PROCEDURE DIVISION.
     PERFORM UNTIL pressed = -1
         CALL "video_present"
         CALL "video_poll" RETURNING pressed
+        CALL "music_pump"
         IF pressed NOT = -1
+            IF mode-n = 3 AND pressed = 27
+                MOVE 1 TO mode-n
+                MOVE 1 TO live-n
+                MOVE 0 TO pick-n
+                PERFORM draw-front
+            ELSE
+            IF mode-n = 5
+                CALL "video_ms" RETURNING now-ms
+                CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
+                    RETURNING wait-ms
+                IF last-ms = 0 OR wait-ms >= 28
+                    MOVE now-ms TO last-ms
+                    MOVE 3 TO wipe-cmd
+                    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+                    PERFORM paint-screen
+                    IF wipe-done = 1
+                        MOVE 3 TO mode-n
+                    END-IF
+                END-IF
+            ELSE
+            IF mode-n NOT = 3
+                PERFORM front-keys
+                PERFORM front-clock
+            ELSE
+            PERFORM size-key
             PERFORM read-keys
+            MOVE pressed TO typed-n
+            IF typed-n >= 65 AND typed-n <= 90
+                ADD 32 TO typed-n
+            END-IF
+            IF typed-n >= 97 AND typed-n <= 122
+                CALL "cheat-feed" USING typed-n cheat-drew
+            ELSE
+                MOVE 0 TO cheat-drew
+            END-IF
             IF k-use = 0
                 MOVE 0 TO k-use-down
             END-IF
@@ -159,6 +233,9 @@ PROCEDURE DIVISION.
             IF ply-hp <= 0
                 MOVE 0 TO moving
                 MOVE 0 TO k-fire
+                MOVE 0 TO ply-dvh
+                MOVE 0 TO ply-bob
+                MOVE 0 TO ply-vbob
             END-IF
             CALL "video_ms" RETURNING now-ms
                 CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
@@ -177,10 +254,24 @@ PROCEDURE DIVISION.
                     END-IF
                     MOVE now-ms TO last-ms
                     MOVE 0 TO draw-now
+                    IF cheat-drew = 1
+                        MOVE 1 TO draw-now
+                    END-IF
                     PERFORM tic-n TIMES
+                        IF ply-hp <= 0 AND ply-vh > 393216
+                            SUBTRACT 65536 FROM ply-vh
+                            IF ply-vh < 393216
+                                MOVE 393216 TO ply-vh
+                            END-IF
+                            MOVE 1 TO draw-now
+                        END-IF
                         IF moving = 1 OR air-n = 1
                             CALL "walk-tic" USING k-up k-down k-left
                                 k-right k-shift k-alt k-comma k-dot
+                            MOVE 1 TO draw-now
+                        END-IF
+                        CALL "floor-tic" USING floor-hurt
+                        IF floor-hurt = 1
                             MOVE 1 TO draw-now
                         END-IF
                         MOVE 0 TO act-mode
@@ -204,38 +295,459 @@ PROCEDURE DIVISION.
                         IF foe-drew = 1
                             MOVE 1 TO draw-now
                         END-IF
+                        IF ply-pain > 0
+                            SUBTRACT 1 FROM ply-pain
+                            MOVE 1 TO draw-now
+                        END-IF
+                        IF ply-fwait > 0
+                            SUBTRACT 1 FROM ply-fwait
+                            MOVE 1 TO draw-now
+                        END-IF
+                        IF ply-exit > 1
+                            SUBTRACT 1 FROM ply-exit
+                        END-IF
+                        IF ply-exit = 1
+                            EXIT PERFORM
+                        END-IF
                     END-PERFORM
-                    IF draw-now = 1
+                    IF draw-now = 1 AND ply-exit NOT = 1
                         CALL "view-frame" USING fb ink
-                        CALL "video_upload" USING fb pal
+                        PERFORM paint-screen
+                    END-IF
+                    IF ply-exit = 1
+                        PERFORM begin-tally
+                    END-IF
+                ELSE
+                    IF cheat-drew = 1 AND ply-exit NOT = 1
+                        CALL "view-frame" USING fb ink
+                        PERFORM paint-screen
                     END-IF
                 END-IF
+            END-IF
+            END-IF
+            END-IF
         END-IF
     END-PERFORM
     CALL "video_shutdown"
     STOP RUN.
 
+draw-front.
+    CALL "ui-draw" USING fb mode-n pick-n skull-n
+        show-k show-i show-s show-t
+    PERFORM paint-screen
+    .
+
+size-key.
+    MOVE ply-blocks TO size-was
+    IF pressed = 45 OR pressed = 1073741910
+        IF ply-blocks > 3
+            SUBTRACT 1 FROM ply-blocks
+        END-IF
+    END-IF
+    IF pressed = 61 OR pressed = 43 OR pressed = 1073741911
+        IF ply-blocks < 11
+            ADD 1 TO ply-blocks
+        END-IF
+    END-IF
+    IF ply-blocks NOT = size-was
+        CALL "view-frame" USING fb ink
+        PERFORM paint-screen
+    END-IF
+    .
+
+front-keys.
+    IF pressed = 0
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 0
+        IF pressed = 27
+            MOVE -1 TO pressed
+        ELSE
+            MOVE 1 TO mode-n
+            MOVE 0 TO pick-n
+            PERFORM draw-front
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 4
+        PERFORM tally-key
+        EXIT PARAGRAPH
+    END-IF
+    IF pressed = 1073741906
+        IF pick-n > 0
+            SUBTRACT 1 FROM pick-n
+        END-IF
+    END-IF
+    IF pressed = 1073741905
+        IF mode-n = 1 AND pick-n < 2
+            ADD 1 TO pick-n
+        END-IF
+        IF mode-n = 2 AND pick-n < 2
+            ADD 1 TO pick-n
+        END-IF
+    END-IF
+    IF mode-n = 2 AND pressed = 1073741904
+        PERFORM opt-left
+    END-IF
+    IF mode-n = 2 AND pressed = 1073741903
+        PERFORM opt-right
+    END-IF
+    IF pressed = 13 OR pressed = 32
+        PERFORM opt-enter
+        IF mode-n = 5 OR pressed = -1
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    IF pressed = 27
+        IF mode-n = 2
+            MOVE 1 TO mode-n
+        ELSE
+            IF live-n = 1
+                MOVE 3 TO mode-n
+                CALL "view-frame" USING fb ink
+                PERFORM paint-screen
+                EXIT PARAGRAPH
+            ELSE
+                MOVE 0 TO mode-n
+                CALL "mus-title"
+            END-IF
+        END-IF
+    END-IF
+    PERFORM draw-front
+    .
+
+opt-left.
+    IF pick-n = 1 AND ply-blocks > 3
+        SUBTRACT 1 FROM ply-blocks
+    END-IF
+    IF pick-n = 2 AND ply-scale > 1
+        SUBTRACT 1 FROM ply-scale
+        CALL "video_set_scale" USING BY VALUE ply-scale RETURNING rc
+    END-IF
+    .
+
+opt-right.
+    IF pick-n = 1 AND ply-blocks < 11
+        ADD 1 TO ply-blocks
+    END-IF
+    IF pick-n = 2 AND ply-scale < 4
+        ADD 1 TO ply-scale
+        CALL "video_set_scale" USING BY VALUE ply-scale RETURNING rc
+    END-IF
+    .
+
+opt-enter.
+    IF mode-n = 1 AND pick-n = 0
+        PERFORM fresh-game
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 1 AND pick-n = 1
+        MOVE 2 TO mode-n
+        MOVE 0 TO pick-n
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 1 AND pick-n = 2
+        MOVE -1 TO pressed
+    END-IF
+    IF mode-n = 2 AND pick-n = 0
+        MOVE 0 TO mode-n
+        MOVE 0 TO live-n
+        MOVE 0 TO pick-n
+        CALL "mus-title"
+    END-IF
+    .
+
+front-clock.
+    IF mode-n = 5
+        EXIT PARAGRAPH
+    END-IF
+    CALL "video_ms" RETURNING now-ms
+    CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
+        RETURNING wait-ms
+    IF last-ms NOT = 0 AND wait-ms < 28
+        EXIT PARAGRAPH
+    END-IF
+    MOVE now-ms TO last-ms
+    IF mode-n = 1 OR mode-n = 2
+        SUBTRACT 1 FROM skull-wait
+        IF skull-wait <= 0
+            MOVE 8 TO skull-wait
+            IF skull-n = 0
+                MOVE 1 TO skull-n
+            ELSE
+                MOVE 0 TO skull-n
+            END-IF
+        END-IF
+    END-IF
+    IF mode-n = 4
+        PERFORM bump-tally
+    END-IF
+    PERFORM draw-front
+    .
+
+tally-key.
+    PERFORM fill-goals
+    IF show-k < goal-k OR show-i < goal-i
+        OR show-s < goal-s OR show-t < goal-t
+        MOVE goal-k TO show-k
+        MOVE goal-i TO show-i
+        MOVE goal-s TO show-s
+        MOVE goal-t TO show-t
+        PERFORM draw-front
+    ELSE
+        PERFORM finish-tally
+    END-IF
+    .
+
+bump-tally.
+    PERFORM fill-goals
+    IF show-k < goal-k
+        ADD 2 TO show-k
+        IF show-k > goal-k
+            MOVE goal-k TO show-k
+        END-IF
+    END-IF
+    IF show-i < goal-i
+        ADD 2 TO show-i
+        IF show-i > goal-i
+            MOVE goal-i TO show-i
+        END-IF
+    END-IF
+    IF show-s < goal-s
+        ADD 2 TO show-s
+        IF show-s > goal-s
+            MOVE goal-s TO show-s
+        END-IF
+    END-IF
+    IF show-t < goal-t
+        ADD 1 TO show-t
+    END-IF
+    .
+
+fill-goals.
+    MOVE 0 TO goal-k
+    MOVE 0 TO goal-i
+    MOVE 0 TO goal-s
+    IF map-kills > 0
+        COMPUTE goal-k = ply-kills * 100 / map-kills
+    END-IF
+    IF map-items > 0
+        COMPUTE goal-i = ply-items * 100 / map-items
+    END-IF
+    IF map-secs > 0
+        COMPUTE goal-s = ply-secs * 100 / map-secs
+    END-IF
+    IF goal-k > 100
+        MOVE 100 TO goal-k
+    END-IF
+    IF goal-i > 100
+        MOVE 100 TO goal-i
+    END-IF
+    IF goal-s > 100
+        MOVE 100 TO goal-s
+    END-IF
+    COMPUTE goal-t = ply-time / 35
+    .
+
+begin-tally.
+    MOVE 0 TO ply-exit
+    MOVE 0 TO show-k
+    MOVE 0 TO show-i
+    MOVE 0 TO show-s
+    MOVE 0 TO show-t
+    MOVE 4 TO mode-n
+    CALL "mus-inter"
+    PERFORM draw-front
+    .
+
+finish-tally.
+    MOVE 1 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 1 TO ply-keep
+    PERFORM restart-level
+    MOVE 2 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 5 TO mode-n
+    .
+
+fresh-game.
+    MOVE 1 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE boot-map TO map-name
+    MOVE 0 TO ply-keep
+    PERFORM load-level
+    MOVE 2 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 1 TO live-n
+    MOVE 5 TO mode-n
+    .
+
+restart-level.
+    MOVE map-name TO prev-map
+    PERFORM next-map
+    MOVE 1 TO ply-keep
+    PERFORM load-level
+    .
+
+load-level.
+    CALL "map-load" USING map-name n-lines n-verts rc
+    IF rc NOT = 0
+        MOVE prev-map TO map-name
+        CALL "map-load" USING map-name n-lines n-verts rc
+    END-IF
+    IF rc NOT = 0
+        MOVE 0 TO ply-exit
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO spr-once
+    MOVE 0 TO ply-on
+    MOVE 0 TO ply-exit
+    MOVE 9 TO act-mode
+    CALL "door-act" USING act-mode door-busy door-moved
+    CALL "view-frame" USING fb ink
+    PERFORM paint-screen
+    CALL "mus-level" USING map-name
+    .
+
+next-map.
+    MOVE map-name TO want-map
+    IF map-name(1:3) = "MAP"
+        PERFORM next-pack
+    ELSE
+        IF map-name(1:1) = "E" AND map-name(3:1) = "M"
+            PERFORM next-episode
+        END-IF
+    END-IF
+    MOVE want-map TO lname
+    CALL "wad-find" USING lname lump-n
+    IF lump-n >= 0
+        MOVE want-map TO map-name
+    END-IF
+    MOVE 0 TO ply-secret
+    .
+
+next-episode.
+    MOVE map-name(2:1) TO ep-c
+    MOVE map-name(4:1) TO mp-c
+    IF ply-secret = 1
+        MOVE "9" TO mp-c
+    ELSE
+        IF mp-c = "9"
+            MOVE "4" TO mp-c
+        ELSE
+            IF mp-c = "8"
+                MOVE "1" TO mp-c
+            ELSE
+                PERFORM bump-map
+            END-IF
+        END-IF
+    END-IF
+    MOVE SPACES TO want-map
+    MOVE "E" TO want-map(1:1)
+    MOVE ep-c TO want-map(2:1)
+    MOVE "M" TO want-map(3:1)
+    MOVE mp-c TO want-map(4:1)
+    .
+
+bump-map.
+    EVALUATE mp-c
+        WHEN "1" MOVE "2" TO mp-c
+        WHEN "2" MOVE "3" TO mp-c
+        WHEN "3" MOVE "4" TO mp-c
+        WHEN "4" MOVE "5" TO mp-c
+        WHEN "5" MOVE "6" TO mp-c
+        WHEN "6" MOVE "7" TO mp-c
+        WHEN "7" MOVE "8" TO mp-c
+        WHEN OTHER MOVE "1" TO mp-c
+    END-EVALUATE
+    .
+
+next-pack.
+    MOVE 0 TO tens-n
+    MOVE 0 TO ones-n
+    EVALUATE map-name(4:1)
+        WHEN "1" MOVE 1 TO tens-n
+        WHEN "2" MOVE 2 TO tens-n
+        WHEN "3" MOVE 3 TO tens-n
+        WHEN OTHER MOVE 0 TO tens-n
+    END-EVALUATE
+    EVALUATE map-name(5:1)
+        WHEN "1" MOVE 1 TO ones-n
+        WHEN "2" MOVE 2 TO ones-n
+        WHEN "3" MOVE 3 TO ones-n
+        WHEN "4" MOVE 4 TO ones-n
+        WHEN "5" MOVE 5 TO ones-n
+        WHEN "6" MOVE 6 TO ones-n
+        WHEN "7" MOVE 7 TO ones-n
+        WHEN "8" MOVE 8 TO ones-n
+        WHEN "9" MOVE 9 TO ones-n
+        WHEN OTHER MOVE 0 TO ones-n
+    END-EVALUATE
+    COMPUTE map-num = tens-n * 10 + ones-n
+    IF ply-secret = 1
+        IF map-num = 15
+            MOVE 31 TO map-num
+        ELSE
+            IF map-num = 31
+                MOVE 32 TO map-num
+            ELSE
+                ADD 1 TO map-num
+            END-IF
+        END-IF
+    ELSE
+        IF map-num = 31
+            MOVE 16 TO map-num
+        ELSE
+            ADD 1 TO map-num
+            IF map-num > 32
+                MOVE 1 TO map-num
+            END-IF
+        END-IF
+    END-IF
+    DIVIDE map-num BY 10 GIVING tens-n REMAINDER ones-n
+    MOVE SPACES TO want-map
+    MOVE "MAP" TO want-map(1:3)
+    EVALUATE tens-n
+        WHEN 1 MOVE "1" TO want-map(4:1)
+        WHEN 2 MOVE "2" TO want-map(4:1)
+        WHEN 3 MOVE "3" TO want-map(4:1)
+        WHEN OTHER MOVE "0" TO want-map(4:1)
+    END-EVALUATE
+    EVALUATE ones-n
+        WHEN 1 MOVE "1" TO want-map(5:1)
+        WHEN 2 MOVE "2" TO want-map(5:1)
+        WHEN 3 MOVE "3" TO want-map(5:1)
+        WHEN 4 MOVE "4" TO want-map(5:1)
+        WHEN 5 MOVE "5" TO want-map(5:1)
+        WHEN 6 MOVE "6" TO want-map(5:1)
+        WHEN 7 MOVE "7" TO want-map(5:1)
+        WHEN 8 MOVE "8" TO want-map(5:1)
+        WHEN 9 MOVE "9" TO want-map(5:1)
+        WHEN OTHER MOVE "0" TO want-map(5:1)
+    END-EVALUATE
+    .
+
+paint-screen.
+    IF ply-pain <= 0 OR pal-n < 6912
+        CALL "video_upload" USING fb pal
+        EXIT PARAGRAPH
+    END-IF
+    ADD ply-pain TO 7 GIVING pain-pal
+    DIVIDE pain-pal BY 8 GIVING pain-pal
+    IF pain-pal > 7
+        MOVE 7 TO pain-pal
+    END-IF
+    ADD 1 TO pain-pal
+    COMPUTE pal-at = pain-pal * 768 + 1
+    MOVE pal(pal-at:768) TO pal-now
+    CALL "video_upload" USING fb pal-now
+    .
+
 read-keys.
     CALL "video_key" USING BY VALUE 1073741906 RETURNING k-up
-    CALL "video_key" USING BY VALUE 119 RETURNING key-n
-    IF key-n NOT = 0
-        MOVE 1 TO k-up
-    END-IF
     CALL "video_key" USING BY VALUE 1073741905 RETURNING k-down
-    CALL "video_key" USING BY VALUE 115 RETURNING key-n
-    IF key-n NOT = 0
-        MOVE 1 TO k-down
-    END-IF
     CALL "video_key" USING BY VALUE 1073741904 RETURNING k-left
-    CALL "video_key" USING BY VALUE 97 RETURNING key-n
-    IF key-n NOT = 0
-        MOVE 1 TO k-left
-    END-IF
     CALL "video_key" USING BY VALUE 1073741903 RETURNING k-right
-    CALL "video_key" USING BY VALUE 100 RETURNING key-n
-    IF key-n NOT = 0
-        MOVE 1 TO k-right
-    END-IF
     CALL "video_key" USING BY VALUE 1073742049 RETURNING k-shift
     CALL "video_key" USING BY VALUE 1073742053 RETURNING key-n
     IF key-n NOT = 0

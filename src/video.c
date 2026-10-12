@@ -16,6 +16,17 @@
 
 #include <stdlib.h>
 
+void audio_shutdown(void);
+
+static unsigned char key_down[SDL_NUM_SCANCODES];
+
+static void remember_key(const SDL_KeyboardEvent *key)
+{
+    if (key->keysym.scancode < SDL_NUM_SCANCODES)
+        key_down[key->keysym.scancode] =
+            key->type == SDL_KEYDOWN ? 1 : 0;
+}
+
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Texture *texture = NULL;
@@ -68,6 +79,7 @@ int video_init(int w, int h, int scale)
 
 void video_shutdown(void)
 {
+    audio_shutdown();
     free(pixels);
     pixels = NULL;
     if (texture != NULL)
@@ -105,6 +117,20 @@ void video_upload(unsigned char *indexed, unsigned char *pal)
     }
 }
 
+int video_set_scale(int scale)
+{
+    if (!sdl_up || window == NULL)
+        return 1;
+    if (scale < 1)
+        scale = 1;
+    if (scale > 4)
+        scale = 4;
+    SDL_SetWindowSize(window, tex_w * scale, tex_h * scale);
+    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED);
+    return 0;
+}
+
 void video_present(void)
 {
     if (renderer == NULL || texture == NULL || pixels == NULL)
@@ -126,30 +152,44 @@ int video_key(int sym)
 {
     const Uint8 *state;
     SDL_Scancode code;
+    SDL_Keymod mods;
 
     if (!sdl_up)
         return 0;
+    mods = SDL_GetModState();
+    if (sym == 1073742048 && (mods & KMOD_LCTRL))
+        return 1;
+    if (sym == 1073742052 && (mods & KMOD_RCTRL))
+        return 1;
+    if (sym == 1073742048)
+        code = SDL_SCANCODE_LCTRL;
+    else if (sym == 1073742052)
+        code = SDL_SCANCODE_RCTRL;
+    else
+        code = SDL_GetScancodeFromKey((SDL_Keycode)sym);
+    if (code == SDL_SCANCODE_UNKNOWN || code >= SDL_NUM_SCANCODES)
+        return 0;
+    if (key_down[code])
+        return 1;
     state = SDL_GetKeyboardState(NULL);
-    if (state == NULL)
-        return 0;
-    code = SDL_GetScancodeFromKey((SDL_Keycode)sym);
-    if (code == SDL_SCANCODE_UNKNOWN)
-        return 0;
-    return state[code] ? 1 : 0;
+    if (state != NULL && state[code])
+        return 1;
+    return 0;
 }
 
 int video_poll(void)
 {
     SDL_Event event;
+    int found;
 
+    found = 0;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT)
             return -1;
-        if (event.type == SDL_KEYDOWN && !event.key.repeat) {
-            if (event.key.keysym.sym == SDLK_ESCAPE)
-                return -1;
-            return (int)event.key.keysym.sym;
-        }
+        if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+            remember_key(&event.key);
+        if (found == 0 && event.type == SDL_KEYDOWN && !event.key.repeat)
+            found = (int)event.key.keysym.sym;
     }
-    return 0;
+    return found;
 }
