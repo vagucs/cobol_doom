@@ -68,3 +68,12 @@
    05 map-secs BINARY-LONG VALUE 0.
    05 ply-blocks BINARY-LONG VALUE 10.
    05 ply-scale BINARY-LONG VALUE 2.
+   05 ply-loc BINARY-LONG VALUE 0.
+   05 ply-warp BINARY-LONG VALUE 0.
+   05 ply-dest PIC X(8) VALUE SPACES.
+   05 ply-msg PIC X(40) VALUE SPACES.
+   05 ply-msgn BINARY-LONG VALUE 0.
+   05 ply-inv BINARY-LONG VALUE 0.
+   05 ply-suit BINARY-LONG VALUE 0.
+   05 ply-lite BINARY-LONG VALUE 0.
+   05 ply-invis BINARY-LONG VALUE 0.

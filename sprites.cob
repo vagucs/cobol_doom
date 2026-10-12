@@ -263,7 +263,7 @@ PROCEDURE DIVISION.
     GOBACK.
 
 place-one.
-    IF n-mobj >= 384
+    IF n-mobj >= 512
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO row-i

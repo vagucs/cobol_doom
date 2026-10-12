@@ -55,7 +55,7 @@ COPY "playstate.cpy".
 01 snd-name PIC X(6).
 
 PROCEDURE DIVISION.
-    IF ply-god = 1
+    IF ply-god = 1 OR ply-inv > 0
         GOBACK
     END-IF
     IF ply-hp <= 0

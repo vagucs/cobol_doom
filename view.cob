@@ -40,7 +40,7 @@ COPY "playstate.cpy".
 01 vp-max BINARY-LONG OCCURS 128 TIMES.
 01 vp-top BINARY-LONG OCCURS 40960 TIMES.
 01 vp-bot BINARY-LONG OCCURS 40960 TIMES.
-01 stk-n BINARY-LONG OCCURS 512 TIMES.
+01 stk-n BINARY-LONG OCCURS 768 TIMES.
 01 dc-src PIC X(128).
 01 flat-buf PIC X(4096).
 01 flat-have BINARY-LONG VALUE -1.
@@ -351,6 +351,11 @@ main-view.
         MOVE 1 TO tables-on
     END-IF
     PERFORM apply-size
+    IF ply-lite > 0
+        MOVE 8 TO extra-l
+    ELSE
+        MOVE 0 TO extra-l
+    END-IF
     IF ply-tic = 0
         MOVE 0 TO ink
     END-IF
@@ -421,6 +426,10 @@ main-view.
         MOVE 0 TO ply-pend
         END-IF
         MOVE 0 TO ply-keep
+        MOVE 0 TO ply-inv
+        MOVE 0 TO ply-suit
+        MOVE 0 TO ply-lite
+        MOVE 0 TO ply-invis
         MOVE 0 TO ply-exit
         MOVE 0 TO ply-time
         MOVE 0 TO ply-pain

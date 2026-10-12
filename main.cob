@@ -35,8 +35,24 @@ WORKING-STORAGE SECTION.
 01 map-num BINARY-LONG.
 01 tens-n BINARY-LONG.
 01 ones-n BINARY-LONG.
-01 cmd-line PIC X(260).
+01 cmd-line PIC X(1024).
 01 want PIC X(260).
+01 arg-at BINARY-LONG.
+01 arg-len BINARY-LONG.
+01 tok PIC X(260).
+01 tok-n BINARY-LONG.
+01 tok-c PIC X.
+01 quote-n BINARY-LONG.
+01 suf-at BINARY-LONG.
+01 fps-on BINARY-LONG VALUE 0.
+01 fps-n BINARY-LONG VALUE 0.
+01 fps-show BINARY-LONG VALUE 0.
+01 fps-ms BINARY-LONG VALUE 0.
+01 go-mode BINARY-LONG VALUE 3.
+01 fin-cmd BINARY-LONG.
+01 fin-stage BINARY-LONG.
+01 snd-name PIC X(6).
+01 mus-loop BINARY-LONG.
 01 found PIC X(260).
 01 lname PIC X(8).
 01 show-lumps PIC ZZZZ9.
@@ -109,14 +125,14 @@ PROCEDURE DIVISION.
         STOP RUN RETURNING 3
     END-IF
     ACCEPT cmd-line FROM COMMAND-LINE
-    MOVE FUNCTION TRIM(cmd-line) TO want
+    PERFORM read-args
     CALL "find-iwad" USING want found rc
     IF rc = 1
         DISPLAY "IWAD nao encontrado: " FUNCTION TRIM(want)
         STOP RUN RETURNING 1
     END-IF
     IF rc NOT = 0
-        DISPLAY "IWAD nao encontrado. Coloque doom1.wad nesta pasta ou numa pasta acima, ou passe o caminho."
+        DISPLAY "IWAD nao encontrado. Coloque doom1.wad nesta pasta ou numa pasta acima, ou passe -iwad arquivo.wad."
         STOP RUN RETURNING 2
     END-IF
     CALL "wad-open" USING found lump-n rc
@@ -177,6 +193,7 @@ PROCEDURE DIVISION.
         "  vista"
     PERFORM UNTIL pressed = -1
         CALL "video_present"
+        PERFORM note-fps
         CALL "video_poll" RETURNING pressed
         CALL "music_pump"
         IF pressed NOT = -1
@@ -185,6 +202,9 @@ PROCEDURE DIVISION.
                 MOVE 1 TO live-n
                 MOVE 0 TO pick-n
                 PERFORM draw-front
+            ELSE
+            IF mode-n = 6
+                PERFORM finale-step
             ELSE
             IF mode-n = 5
                 CALL "video_ms" RETURNING now-ms
@@ -196,7 +216,7 @@ PROCEDURE DIVISION.
                     CALL "ui-wipe" USING fb wipe-cmd wipe-done
                     PERFORM paint-screen
                     IF wipe-done = 1
-                        MOVE 3 TO mode-n
+                        MOVE go-mode TO mode-n
                     END-IF
                 END-IF
             ELSE
@@ -211,9 +231,13 @@ PROCEDURE DIVISION.
                 ADD 32 TO typed-n
             END-IF
             IF typed-n >= 97 AND typed-n <= 122
+                OR (typed-n >= 48 AND typed-n <= 57)
                 CALL "cheat-feed" USING typed-n cheat-drew
             ELSE
                 MOVE 0 TO cheat-drew
+            END-IF
+            IF ply-warp = 1
+                PERFORM do-warp
             END-IF
             IF k-use = 0
                 MOVE 0 TO k-use-down
@@ -295,6 +319,7 @@ PROCEDURE DIVISION.
                         IF foe-drew = 1
                             MOVE 1 TO draw-now
                         END-IF
+                        PERFORM fade-powers
                         IF ply-pain > 0
                             SUBTRACT 1 FROM ply-pain
                             MOVE 1 TO draw-now
@@ -326,15 +351,82 @@ PROCEDURE DIVISION.
             END-IF
             END-IF
             END-IF
+            END-IF
         END-IF
     END-PERFORM
     CALL "video_shutdown"
     STOP RUN.
 
+do-warp.
+    MOVE 0 TO ply-warp
+    MOVE ply-dest TO map-name
+    MOVE 0 TO ply-k0
+    MOVE 0 TO ply-k1
+    MOVE 0 TO ply-k2
+    MOVE 0 TO ply-k3
+    MOVE 0 TO ply-k4
+    MOVE 0 TO ply-k5
+    MOVE 1 TO ply-keep
+    MOVE map-name TO prev-map
+    PERFORM load-level
+    .
+
+fade-powers.
+    IF ply-msgn > 0
+        SUBTRACT 1 FROM ply-msgn
+    END-IF
+    IF ply-inv > 0
+        SUBTRACT 1 FROM ply-inv
+    END-IF
+    IF ply-suit > 0
+        SUBTRACT 1 FROM ply-suit
+    END-IF
+    IF ply-lite > 0
+        SUBTRACT 1 FROM ply-lite
+    END-IF
+    IF ply-invis > 0
+        SUBTRACT 1 FROM ply-invis
+    END-IF
+    .
+
 draw-front.
     CALL "ui-draw" USING fb mode-n pick-n skull-n
         show-k show-i show-s show-t
     PERFORM paint-screen
+    .
+
+finale-step.
+    IF pressed > 0
+        MOVE 3 TO fin-cmd
+        CALL "fin-act" USING fb fin-cmd map-name fin-stage
+        IF fin-stage = 9
+            PERFORM end-finale
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    CALL "video_ms" RETURNING now-ms
+    CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
+        RETURNING wait-ms
+    IF last-ms = 0 OR wait-ms >= 28
+        MOVE now-ms TO last-ms
+        MOVE 2 TO fin-cmd
+        CALL "fin-act" USING fb fin-cmd map-name fin-stage
+        PERFORM paint-screen
+    END-IF
+    .
+
+end-finale.
+    MOVE 1 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 0 TO mode-n
+    MOVE 0 TO live-n
+    MOVE 0 TO pick-n
+    CALL "mus-title"
+    PERFORM draw-front
+    MOVE 2 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 0 TO go-mode
+    MOVE 5 TO mode-n
     .
 
 size-key.
@@ -469,6 +561,7 @@ front-clock.
     END-IF
     MOVE now-ms TO last-ms
     IF mode-n = 1 OR mode-n = 2
+        OR (mode-n = 4 AND ply-loc = 1)
         SUBTRACT 1 FROM skull-wait
         IF skull-wait <= 0
             MOVE 8 TO skull-wait
@@ -495,7 +588,14 @@ tally-key.
         MOVE goal-t TO show-t
         PERFORM draw-front
     ELSE
-        PERFORM finish-tally
+        IF ply-loc = 0
+            MOVE 1 TO ply-loc
+            MOVE 0 TO skull-n
+            MOVE 8 TO skull-wait
+            PERFORM draw-front
+        ELSE
+            PERFORM finish-tally
+        END-IF
     END-IF
     .
 
@@ -551,6 +651,7 @@ fill-goals.
 
 begin-tally.
     MOVE 0 TO ply-exit
+    MOVE 0 TO ply-loc
     MOVE 0 TO show-k
     MOVE 0 TO show-i
     MOVE 0 TO show-s
@@ -563,8 +664,19 @@ begin-tally.
 finish-tally.
     MOVE 1 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
-    MOVE 1 TO ply-keep
-    PERFORM restart-level
+    IF map-name(1:1) = "E" AND map-name(4:1) = "8"
+        AND ply-secret = 0
+        MOVE 1 TO fin-cmd
+        CALL "fin-act" USING fb fin-cmd map-name fin-stage
+        MOVE "victor" TO snd-name
+        MOVE 1 TO mus-loop
+        CALL "mus-play" USING snd-name mus-loop
+        MOVE 6 TO go-mode
+    ELSE
+        MOVE 1 TO ply-keep
+        PERFORM restart-level
+        MOVE 3 TO go-mode
+    END-IF
     MOVE 2 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
     MOVE 5 TO mode-n
@@ -579,6 +691,7 @@ fresh-game.
     MOVE 2 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
     MOVE 1 TO live-n
+    MOVE 3 TO go-mode
     MOVE 5 TO mode-n
     .
 
@@ -728,6 +841,12 @@ next-pack.
     .
 
 paint-screen.
+    IF ply-msgn > 0
+        CALL "msg-stamp" USING fb ply-msg
+    END-IF
+    IF fps-on = 1
+        CALL "fps-stamp" USING fb fps-show
+    END-IF
     IF ply-pain <= 0 OR pal-n < 6912
         CALL "video_upload" USING fb pal
         EXIT PARAGRAPH
@@ -741,6 +860,107 @@ paint-screen.
     COMPUTE pal-at = pain-pal * 768 + 1
     MOVE pal(pal-at:768) TO pal-now
     CALL "video_upload" USING fb pal-now
+    .
+
+read-args.
+    MOVE SPACES TO want
+    MOVE 0 TO fps-on
+    MOVE FUNCTION LENGTH(FUNCTION TRIM(cmd-line)) TO arg-len
+    IF arg-len < 1
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO arg-at
+    PERFORM UNTIL arg-at > arg-len
+        PERFORM skip-sp
+        IF arg-at > arg-len
+            EXIT PERFORM
+        END-IF
+        PERFORM read-tok
+        PERFORM take-tok
+    END-PERFORM
+    .
+
+skip-sp.
+    PERFORM UNTIL arg-at > arg-len
+        IF cmd-line(arg-at:1) NOT = " "
+            EXIT PERFORM
+        END-IF
+        ADD 1 TO arg-at
+    END-PERFORM
+    .
+
+read-tok.
+    MOVE SPACES TO tok
+    MOVE 0 TO tok-n
+    MOVE 0 TO quote-n
+    IF arg-at <= arg-len AND cmd-line(arg-at:1) = '"'
+        MOVE 1 TO quote-n
+        ADD 1 TO arg-at
+    END-IF
+    PERFORM UNTIL arg-at > arg-len OR tok-n >= 260
+        MOVE cmd-line(arg-at:1) TO tok-c
+        IF quote-n = 1 AND tok-c = '"'
+            ADD 1 TO arg-at
+            EXIT PERFORM
+        END-IF
+        IF quote-n = 0 AND tok-c = " "
+            EXIT PERFORM
+        END-IF
+        ADD 1 TO tok-n
+        MOVE tok-c TO tok(tok-n:1)
+        ADD 1 TO arg-at
+    END-PERFORM
+    .
+
+take-tok.
+    IF tok-n < 1
+        EXIT PARAGRAPH
+    END-IF
+    IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-FPS"
+        MOVE 1 TO fps-on
+        EXIT PARAGRAPH
+    END-IF
+    IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-IWAD"
+        PERFORM skip-sp
+        PERFORM read-tok
+        MOVE tok TO want
+        EXIT PARAGRAPH
+    END-IF
+    IF tok-n >= 4
+        SUBTRACT 3 FROM tok-n GIVING suf-at
+        IF FUNCTION UPPER-CASE(tok(suf-at:4)) = ".WAD"
+            MOVE tok TO want
+        END-IF
+    END-IF
+    .
+
+note-fps.
+    IF fps-on = 0
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO fps-n
+    CALL "video_ms" RETURNING now-ms
+    IF fps-ms = 0
+        MOVE now-ms TO fps-ms
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE now-ms BY VALUE fps-ms
+        RETURNING wait-ms
+    IF wait-ms < 1000
+        EXIT PARAGRAPH
+    END-IF
+    MOVE fps-n TO fps-show
+    MOVE 0 TO fps-n
+    MOVE now-ms TO fps-ms
+    IF mode-n = 3
+        CALL "view-frame" USING fb ink
+        PERFORM paint-screen
+    ELSE
+        IF mode-n = 0 OR mode-n = 1 OR mode-n = 2
+            OR mode-n = 4
+            PERFORM draw-front
+        END-IF
+    END-IF
     .
 
 read-keys.

@@ -82,11 +82,13 @@ run.bat
 
 O `build.bat` só compila. A janela é 640×400. A textura é 320×200.
 
-O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. Um caminho na linha de comando ganha:
+O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo, como nos outros portes. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito.
 
 ```
-run.bat C:\wads\doom1.wad
+run.bat -iwad C:\wads\doom1.wad -fps
 ```
+
+Os cheats de sempre valem em pé: `iddqd`, `idkfa`, `idfa`, `idclip`, `idspispopd`, `idchoppers`, `idmypos`, `idbehold` e a letra seguinte (`v` invulnerável, `s` força, `i` invisível, `r` traje, `l` luz), `idmus` e `idclev` com dois números. `idclev16` abre o E1M6. `iddt` não tem mapa automático nesta versão.
 
 ---
 

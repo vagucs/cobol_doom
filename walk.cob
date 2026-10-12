@@ -40,7 +40,7 @@ COPY "playstate.cpy".
 01 box-b BINARY-LONG.
 01 box-t BINARY-LONG.
 01 seen-gen BINARY-LONG VALUE 0.
-01 seen-ln BINARY-LONG OCCURS 1104 TIMES.
+01 seen-ln BINARY-LONG OCCURS 1536 TIMES.
 01 bsp BINARY-LONG.
 01 node-slot BINARY-LONG.
 01 sub-slot BINARY-LONG.
@@ -729,8 +729,13 @@ main-floor.
     IF spec-n = 4 OR spec-n = 16 OR spec-n = 11
         MOVE 20 TO dmg-n
     END-IF
-    IF dmg-n = 0 OR ply-god = 1
+    IF dmg-n = 0 OR ply-god = 1 OR ply-inv > 0
         GOBACK
+    END-IF
+    IF ply-suit > 0
+        IF spec-n = 5 OR spec-n = 7
+            GOBACK
+        END-IF
     END-IF
     IF ply-atype > 0 AND ply-armor > 0
         IF ply-atype = 1

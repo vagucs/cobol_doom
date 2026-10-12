@@ -491,7 +491,8 @@ draw-face.
             MOVE kill-len(slot-n) TO pick-len
             MOVE kill-img(slot-n) TO face-pick
         END-IF
-        IF ply-god = 1 AND ply-fwait = 0 AND god-len >= 8
+        IF (ply-god = 1 OR ply-inv > 0)
+            AND ply-fwait = 0 AND god-len >= 8
             MOVE god-len TO pick-len
             MOVE god-img TO face-pick
         END-IF

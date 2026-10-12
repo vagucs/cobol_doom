@@ -100,7 +100,7 @@ load-vertexes.
     MOVE 4 TO lump-delta
     PERFORM read-at
     COMPUTE n-vertex = lump-len / 4
-    IF n-vertex > 1104
+    IF n-vertex > 1536
         MOVE "vertices demais" TO reason
         PERFORM fail-map
     END-IF
@@ -198,7 +198,7 @@ load-lines.
     MOVE 2 TO lump-delta
     PERFORM read-at
     COMPUTE n-line = lump-len / 14
-    IF n-line > 1104
+    IF n-line > 1536
         MOVE "linhas demais" TO reason
         PERFORM fail-map
     END-IF
@@ -339,7 +339,7 @@ load-ssectors.
     MOVE 6 TO lump-delta
     PERFORM read-at
     COMPUTE n-ssector = lump-len / 4
-    IF n-ssector > 512
+    IF n-ssector > 768
         MOVE "subsectors demais" TO reason
         PERFORM fail-map
     END-IF
@@ -359,7 +359,7 @@ load-nodes.
     MOVE 7 TO lump-delta
     PERFORM read-at
     COMPUTE n-node = lump-len / 28
-    IF n-node > 512
+    IF n-node > 768
         MOVE "nodes demais" TO reason
         PERFORM fail-map
     END-IF
@@ -398,7 +398,7 @@ load-things.
     MOVE 1 TO lump-delta
     PERFORM read-at
     COMPUTE n-thing = lump-len / 10
-    IF n-thing > 512
+    IF n-thing > 768
         MOVE "things demais" TO reason
         PERFORM fail-map
     END-IF

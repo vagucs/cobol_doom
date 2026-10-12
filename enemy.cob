@@ -78,6 +78,11 @@ WORKING-STORAGE SECTION.
 01 frac BINARY-LONG.
 01 did-cross BINARY-LONG.
 01 blocked BINARY-LONG.
+01 box-l BINARY-LONG.
+01 box-r BINARY-LONG.
+01 box-b BINARY-LONG.
+01 box-t BINARY-LONG.
+01 corner-n BINARY-LONG.
 01 fs BINARY-LONG.
 01 bs BINARY-LONG.
 01 op-top BINARY-LONG.
@@ -503,8 +508,14 @@ imp-fire.
     .
 
 hurt-player.
-    IF ply-god = 1
+    IF ply-god = 1 OR ply-inv > 0
         EXIT PARAGRAPH
+    END-IF
+    IF ply-invis > 0
+        PERFORM take-rnd
+        IF rnd-n < 128
+            EXIT PARAGRAPH
+        END-IF
     END-IF
     SUBTRACT dmg FROM ply-hp
     IF ply-hp < 0
@@ -529,7 +540,7 @@ hurt-player.
     .
 
 spawn-ball.
-    IF n-mobj >= 384
+    IF n-mobj >= 512
         EXIT PARAGRAPH
     END-IF
     CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
@@ -677,10 +688,19 @@ ball-hit.
     CALL "sub_i32" USING BY VALUE ny BY VALUE oy RETURNING tdy
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR blocked = 1
         PERFORM cross-one
+        IF did-cross = 0
+            PERFORM ball-near
+        END-IF
         IF did-cross = 1
             PERFORM open-of
             IF two-side = 0 OR op-bot >= op-top
                 MOVE 1 TO blocked
+            ELSE
+                CALL "add_i32" USING BY VALUE nz BY VALUE mo-h(who-i)
+                    RETURNING tmp
+                IF tmp >= op-top OR nz <= op-bot
+                    MOVE 1 TO blocked
+                END-IF
             END-IF
         END-IF
     END-PERFORM
@@ -734,7 +754,7 @@ ray-player.
     .
 
 puff-at.
-    IF n-mobj >= 384
+    IF n-mobj >= 512
         EXIT PARAGRAPH
     END-IF
     CALL "fixed_mul" USING BY VALUE tdx BY VALUE wall-fr RETURNING nx
@@ -1175,6 +1195,58 @@ hear-lines.
             END-IF
         END-IF
     END-PERFORM
+    .
+
+ball-near.
+    CALL "sub_i32" USING BY VALUE nx BY VALUE mo-rad(who-i)
+        RETURNING box-l
+    CALL "add_i32" USING BY VALUE nx BY VALUE mo-rad(who-i)
+        RETURNING box-r
+    CALL "sub_i32" USING BY VALUE ny BY VALUE mo-rad(who-i)
+        RETURNING box-b
+    CALL "add_i32" USING BY VALUE ny BY VALUE mo-rad(who-i)
+        RETURNING box-t
+    IF box-r <= ln-bl(li) OR box-l >= ln-br(li)
+        OR box-t <= ln-bb(li) OR box-b >= ln-bt(li)
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE vtx-x(ln-v2(li))
+        BY VALUE vtx-x(ln-v1(li)) RETURNING sh1
+    CALL "sub_i32" USING BY VALUE vtx-y(ln-v2(li))
+        BY VALUE vtx-y(ln-v1(li)) RETURNING sh2
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-l BY VALUE box-b
+        RETURNING side-a
+    MOVE 0 TO corner-n
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-l BY VALUE box-t
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-r BY VALUE box-b
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-r BY VALUE box-t
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    IF corner-n = 1
+        MOVE 1 TO did-cross
+    END-IF
     .
 
 open-of.

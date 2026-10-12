@@ -140,6 +140,11 @@ WORKING-STORAGE SECTION.
 01 nx BINARY-LONG.
 01 ny BINARY-LONG.
 01 nz BINARY-LONG.
+01 box-l BINARY-LONG.
+01 box-r BINARY-LONG.
+01 box-b BINARY-LONG.
+01 box-t BINARY-LONG.
+01 corner-n BINARY-LONG.
 01 blob-name PIC X(4).
 01 blob-fr BINARY-LONG.
 01 blob-tic BINARY-LONG.
@@ -849,7 +854,7 @@ launch-bfg.
     .
 
 spawn-bolt.
-    IF n-mobj >= 384 OR ply-on = 0
+    IF n-mobj >= 512 OR ply-on = 0
         EXIT PARAGRAPH
     END-IF
     DIVIDE ply-h BY 2 GIVING half-h
@@ -864,8 +869,8 @@ spawn-bolt.
     END-IF
     CALL "fine_cos_ang" USING BY VALUE try-ang RETURNING cs
     CALL "fine_sin_ang" USING BY VALUE try-ang RETURNING sn
-    CALL "fixed_mul" USING BY VALUE cs BY VALUE 2097152 RETURNING dx
-    CALL "fixed_mul" USING BY VALUE sn BY VALUE 2097152 RETURNING dy
+    CALL "fixed_mul" USING BY VALUE cs BY VALUE ply-rad RETURNING dx
+    CALL "fixed_mul" USING BY VALUE sn BY VALUE ply-rad RETURNING dy
     ADD 1 TO n-mobj
     CALL "add_i32" USING BY VALUE ply-x BY VALUE dx RETURNING mo-x(n-mobj)
     CALL "add_i32" USING BY VALUE ply-y BY VALUE dy RETURNING mo-y(n-mobj)
@@ -1380,7 +1385,7 @@ puff-spawn.
     .
 
 spawn-blob.
-    IF n-mobj >= 384
+    IF n-mobj >= 512
         EXIT PARAGRAPH
     END-IF
     ADD 1 TO n-mobj
@@ -1518,6 +1523,15 @@ start-death.
         MOVE 5 TO mo-seq(who-i)
     END-IF
     PERFORM foe-die
+    IF mo-name(who-i) = "BAR1"
+        MOVE "BEXP" TO mo-name(who-i)
+        MOVE 0 TO mo-frame(who-i)
+        MOVE 0 TO mo-step(who-i)
+        MOVE 5 TO mo-tic(who-i)
+        MOVE 3 TO mo-kind(who-i)
+        MOVE 1 TO moved-out
+        EXIT PARAGRAPH
+    END-IF
     MOVE 3 TO mo-kind(who-i)
     IF mo-seq(who-i) = 0
         MOVE -1 TO mo-tic(who-i)
@@ -1563,6 +1577,9 @@ fly-one.
     CALL "sub_i32" USING BY VALUE ny BY VALUE oy RETURNING tdy
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR boom-n = 1
         PERFORM bolt-cross
+        IF did-cross = 0
+            PERFORM bolt-near
+        END-IF
         IF did-cross = 1
             PERFORM bolt-gap
             IF two-side = 0 OR op-bot >= op-top
@@ -1722,6 +1739,7 @@ rocket-splash.
     END-IF
     CALL "shar32" USING BY VALUE dx BY VALUE 16 RETURNING units-n
     IF units-n < 128 AND ply-hp > 0 AND ply-god = 0
+        AND ply-inv = 0
         SUBTRACT units-n FROM 128 GIVING dmg
         SUBTRACT dmg FROM ply-hp
         IF ply-hp < 0
@@ -1866,6 +1884,58 @@ bolt-cross.
     MOVE 1 TO did-cross
     .
 
+bolt-near.
+    CALL "sub_i32" USING BY VALUE nx BY VALUE mo-rad(bolt-i)
+        RETURNING box-l
+    CALL "add_i32" USING BY VALUE nx BY VALUE mo-rad(bolt-i)
+        RETURNING box-r
+    CALL "sub_i32" USING BY VALUE ny BY VALUE mo-rad(bolt-i)
+        RETURNING box-b
+    CALL "add_i32" USING BY VALUE ny BY VALUE mo-rad(bolt-i)
+        RETURNING box-t
+    IF box-r <= ln-bl(li) OR box-l >= ln-br(li)
+        OR box-t <= ln-bb(li) OR box-b >= ln-bt(li)
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE vtx-x(ln-v2(li))
+        BY VALUE vtx-x(ln-v1(li)) RETURNING sh1
+    CALL "sub_i32" USING BY VALUE vtx-y(ln-v2(li))
+        BY VALUE vtx-y(ln-v1(li)) RETURNING sh2
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-l BY VALUE box-b
+        RETURNING side-a
+    MOVE 0 TO corner-n
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-l BY VALUE box-t
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-r BY VALUE box-b
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    CALL "point_side" USING
+        BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+        BY VALUE sh1 BY VALUE sh2
+        BY VALUE box-r BY VALUE box-t
+        RETURNING side-bit
+    IF side-bit NOT = side-a
+        MOVE 1 TO corner-n
+    END-IF
+    IF corner-n = 1
+        MOVE 1 TO did-cross
+    END-IF
+    .
+
 bolt-gap.
     MOVE 0 TO two-side
     CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 4
@@ -1950,7 +2020,11 @@ tick-fx.
                     PERFORM blood-next
                 END-IF
                 IF mo-kind(who-i) = 3
-                    PERFORM corpse-next
+                    IF mo-name(who-i) = "BEXP"
+                        PERFORM bexp-next
+                    ELSE
+                        PERFORM corpse-next
+                    END-IF
                 END-IF
             END-IF
         END-IF
@@ -1987,6 +2061,18 @@ blood-next.
     ELSE
         SUBTRACT 1 FROM mo-frame(who-i)
         MOVE 8 TO mo-tic(who-i)
+    END-IF
+    MOVE 1 TO moved-out
+    .
+
+bexp-next.
+    ADD 1 TO mo-frame(who-i)
+    IF mo-frame(who-i) > 4
+        MOVE SPACES TO mo-name(who-i)
+        MOVE 0 TO mo-kind(who-i)
+        MOVE 0 TO mo-tic(who-i)
+    ELSE
+        MOVE 5 TO mo-tic(who-i)
     END-IF
     MOVE 1 TO moved-out
     .

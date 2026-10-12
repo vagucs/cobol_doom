@@ -82,11 +82,13 @@ run.bat
 
 `build.bat` only compiles. The window is 640×400. The texture is 320×200.
 
-The IWAD is the first file that exists among `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad`, and `freedoom2.wad`. The search starts at `DOOMWADDIR` or `DOOMWADPATH` when that variable is set, then the current folder and parent folders. A path on the command line wins:
+The IWAD is the first file that exists among `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad`, and `freedoom2.wad`. The search starts at `DOOMWADDIR` or `DOOMWADPATH` when that variable is set, then the current folder and parent folders. `-iwad` chooses the file, the same way as the other ports. A bare path ending in `.wad` also works. `-fps` shows the frames per second in the top-right corner.
 
 ```
-run.bat C:\wads\doom1.wad
+run.bat -iwad C:\wads\doom1.wad -fps
 ```
+
+The usual cheats work while standing still: `iddqd`, `idkfa`, `idfa`, `idclip`, `idspispopd`, `idchoppers`, `idmypos`, `idbehold` plus the next letter (`v` invulnerable, `s` strength, `i` invisible, `r` suit, `l` light), `idmus` and `idclev` with two digits. `idclev16` opens E1M6. `iddt` has no automap in this version.
 
 ---
 
