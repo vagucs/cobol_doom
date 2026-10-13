@@ -27,7 +27,7 @@ WORKING-STORAGE SECTION.
 01 dr-top BINARY-LONG OCCURS 32 TIMES.
 01 dr-spd BINARY-LONG OCCURS 32 TIMES.
 01 dr-wait BINARY-LONG OCCURS 32 TIMES.
-01 sec-door BINARY-LONG OCCURS 256 TIMES.
+01 sec-door BINARY-LONG OCCURS 512 TIMES.
 01 n-hit BINARY-LONG.
 01 hit-ln BINARY-LONG OCCURS 64 TIMES.
 01 hit-fr BINARY-LONG OCCURS 64 TIMES.
@@ -179,7 +179,7 @@ init-doors.
         MOVE 0 TO dr-on(di)
         MOVE 0 TO sec-door(di)
     END-PERFORM
-    PERFORM VARYING di FROM 33 BY 1 UNTIL di > 256
+    PERFORM VARYING di FROM 33 BY 1 UNTIL di > 512
         MOVE 0 TO sec-door(di)
     END-PERFORM
     PERFORM VARYING fl-i FROM 1 BY 1 UNTIL fl-i > 32
@@ -865,7 +865,7 @@ door-shut-snd.
     .
 
 spawn-door.
-    IF sec-slot < 1 OR sec-slot > 256
+    IF sec-slot < 1 OR sec-slot > 512
         EXIT PARAGRAPH
     END-IF
     IF sec-door(sec-slot) NOT = 0
@@ -1127,7 +1127,7 @@ load-switches.
 
 drop-door.
     MOVE 0 TO dr-on(di)
-    IF keep-sec >= 1 AND keep-sec <= 256
+    IF keep-sec >= 1 AND keep-sec <= 512
         MOVE 0 TO sec-door(keep-sec)
     END-IF
     .
@@ -1270,7 +1270,7 @@ sector-at.
         EXIT PARAGRAPH
     END-IF
     COMPUTE bsp = n-node - 1
-    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 256
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 1024
         IF bsp < 0
             EXIT PERFORM
         END-IF

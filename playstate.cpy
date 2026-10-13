@@ -77,3 +77,5 @@
    05 ply-suit BINARY-LONG VALUE 0.
    05 ply-lite BINARY-LONG VALUE 0.
    05 ply-invis BINARY-LONG VALUE 0.
+   05 ply-str BINARY-LONG VALUE 0.
+   05 ply-amap BINARY-LONG VALUE 0.

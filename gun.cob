@@ -50,6 +50,8 @@ WORKING-STORAGE SECTION.
 01 best BINARY-LONG.
 01 mo-i BINARY-LONG.
 01 who-i BINARY-LONG.
+01 burst-k BINARY-LONG.
+01 burst-ang BINARY-LONG.
 01 dx BINARY-LONG.
 01 dy BINARY-LONG.
 01 side-bit BINARY-LONG.
@@ -854,7 +856,7 @@ launch-bfg.
     .
 
 spawn-bolt.
-    IF n-mobj >= 512 OR ply-on = 0
+    IF n-mobj >= 768 OR ply-on = 0
         EXIT PARAGRAPH
     END-IF
     DIVIDE ply-h BY 2 GIVING half-h
@@ -960,6 +962,9 @@ saw-cut.
     DIVIDE rnd-n BY 10 GIVING q-n REMAINDER rem-n
     ADD 1 TO rem-n
     MULTIPLY rem-n BY 2 GIVING dmg
+    IF ply-weap = 1 AND ply-str > 0
+        MULTIPLY dmg BY 10 GIVING dmg
+    END-IF
     MOVE 1 TO melee-n
     PERFORM fire-ray
     .
@@ -1127,12 +1132,12 @@ measure-open.
     MOVE 0 TO op-bot
     MOVE 1 TO fl-diff
     MOVE 1 TO cl-diff
-    IF fs < 1 OR fs > 256
+    IF fs < 1 OR fs > 512
         EXIT PARAGRAPH
     END-IF
     MOVE sec-floor-h(fs) TO op-bot
     MOVE sec-ceil-h(fs) TO op-top
-    IF bs >= 1 AND bs <= 256
+    IF bs >= 1 AND bs <= 512
         IF sec-floor-h(bs) = sec-floor-h(fs)
             MOVE 0 TO fl-diff
         END-IF
@@ -1252,12 +1257,12 @@ line-shot.
     MOVE 1 TO stop-scan
     MOVE 128 TO back-n
     PERFORM mark-spot
-    IF fs >= 1 AND fs <= 256
+    IF fs >= 1 AND fs <= 512
         IF sec-ceil-pic(fs) = sky-flat AND zz > sec-ceil-h(fs)
             EXIT PARAGRAPH
         END-IF
         IF sec-ceil-pic(fs) = sky-flat
-            AND bs >= 1 AND bs <= 256
+            AND bs >= 1 AND bs <= 512
             AND sec-ceil-pic(bs) = sky-flat
             EXIT PARAGRAPH
         END-IF
@@ -1385,7 +1390,7 @@ puff-spawn.
     .
 
 spawn-blob.
-    IF n-mobj >= 512
+    IF n-mobj >= 768
         EXIT PARAGRAPH
     END-IF
     ADD 1 TO n-mobj
@@ -1427,6 +1432,16 @@ flinch.
         AND mo-name(who-i) NOT = "SARG"
         AND mo-name(who-i) NOT = "BOSS"
         AND mo-name(who-i) NOT = "BOS2"
+        AND mo-name(who-i) NOT = "SSWV"
+        AND mo-name(who-i) NOT = "HEAD"
+        AND mo-name(who-i) NOT = "SKUL"
+        AND mo-name(who-i) NOT = "SPID"
+        AND mo-name(who-i) NOT = "CYBR"
+        AND mo-name(who-i) NOT = "BSPI"
+        AND mo-name(who-i) NOT = "VILE"
+        AND mo-name(who-i) NOT = "SKEL"
+        AND mo-name(who-i) NOT = "FATT"
+        AND mo-name(who-i) NOT = "PAIN"
         EXIT PARAGRAPH
     END-IF
     PERFORM take-rnd
@@ -1434,13 +1449,18 @@ flinch.
         EXIT PARAGRAPH
     END-IF
     IF mo-name(who-i) = "SARG" OR mo-name(who-i) = "BOSS"
-        OR mo-name(who-i) = "BOS2"
+        OR mo-name(who-i) = "BOS2" OR mo-name(who-i) = "HEAD"
+        OR mo-name(who-i) = "SPID" OR mo-name(who-i) = "CYBR"
+        OR mo-name(who-i) = "BSPI" OR mo-name(who-i) = "VILE"
+        OR mo-name(who-i) = "SKEL" OR mo-name(who-i) = "FATT"
+        OR mo-name(who-i) = "PAIN" OR mo-name(who-i) = "SKUL"
         MOVE "dmpain" TO snd-name
     ELSE
         MOVE "popain" TO snd-name
     END-IF
     CALL "sfx-play" USING snd-name
     IF mo-name(who-i) = "BOSS" OR mo-name(who-i) = "BOS2"
+        OR mo-name(who-i) = "CYBR" OR mo-name(who-i) = "SPID"
         EXIT PARAGRAPH
     END-IF
     MOVE 5 TO mo-ai(who-i)
@@ -1491,6 +1511,36 @@ foe-die.
     IF mo-name(who-i) = "BOS2"
         MOVE "kntdth" TO snd-name
     END-IF
+    IF mo-name(who-i) = "SSWV"
+        MOVE "podth2" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "HEAD"
+        MOVE "cacdth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "SKUL"
+        MOVE "firxpl" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "SPID"
+        MOVE "spidth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "CYBR"
+        MOVE "cybdth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "BSPI"
+        MOVE "bspdth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "VILE"
+        MOVE "vildth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "SKEL"
+        MOVE "skedth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "FATT"
+        MOVE "mandth" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "PAIN"
+        MOVE "pedth" TO snd-name
+    END-IF
     IF snd-name NOT = SPACES
         CALL "sfx-play" USING snd-name
     END-IF
@@ -1508,6 +1558,7 @@ start-death.
     DIVIDE mo-h(who-i) BY 4 GIVING mo-h(who-i)
     MOVE 0 TO mo-seq(who-i)
     IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
+        OR mo-name(who-i) = "SSWV"
         MOVE 1 TO mo-seq(who-i)
     END-IF
     IF mo-name(who-i) = "TROO"
@@ -1519,8 +1570,14 @@ start-death.
     IF mo-name(who-i) = "CPOS"
         MOVE 4 TO mo-seq(who-i)
     END-IF
-    IF mo-name(who-i) = "HEAD"
+    IF mo-name(who-i) = "HEAD" OR mo-name(who-i) = "PAIN"
+        OR mo-name(who-i) = "SKUL"
         MOVE 5 TO mo-seq(who-i)
+    END-IF
+    IF mo-name(who-i) = "CYBR" OR mo-name(who-i) = "SPID"
+        OR mo-name(who-i) = "BSPI" OR mo-name(who-i) = "VILE"
+        OR mo-name(who-i) = "SKEL" OR mo-name(who-i) = "FATT"
+        MOVE 2 TO mo-seq(who-i)
     END-IF
     PERFORM foe-die
     IF mo-name(who-i) = "BAR1"
@@ -1533,6 +1590,9 @@ start-death.
         EXIT PARAGRAPH
     END-IF
     MOVE 3 TO mo-kind(who-i)
+    IF mo-name(who-i) = "PAIN"
+        PERFORM pain-burst
+    END-IF
     IF mo-seq(who-i) = 0
         MOVE -1 TO mo-tic(who-i)
         MOVE 1 TO moved-out
@@ -1543,6 +1603,50 @@ start-death.
     MOVE die-fr(slot) TO mo-frame(who-i)
     MOVE die-tic(slot) TO mo-tic(who-i)
     MOVE 1 TO moved-out
+    .
+
+pain-burst.
+    MOVE mo-ang(who-i) TO burst-ang
+    PERFORM VARYING burst-k FROM 1 BY 1 UNTIL burst-k > 3
+        PERFORM one-soul
+        CALL "add_i32" USING BY VALUE burst-ang BY VALUE 1073741824
+            RETURNING burst-ang
+    END-PERFORM
+    .
+
+one-soul.
+    IF n-mobj >= 768
+        EXIT PARAGRAPH
+    END-IF
+    CALL "fine_cos_ang" USING BY VALUE burst-ang RETURNING cs
+    CALL "fine_sin_ang" USING BY VALUE burst-ang RETURNING sn
+    CALL "fixed_mul" USING BY VALUE cs BY VALUE 2097152 RETURNING dx
+    CALL "fixed_mul" USING BY VALUE sn BY VALUE 2097152 RETURNING dy
+    ADD 1 TO n-mobj
+    CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE dx
+        RETURNING mo-x(n-mobj)
+    CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE dy
+        RETURNING mo-y(n-mobj)
+    MOVE mo-z(who-i) TO mo-z(n-mobj)
+    MOVE "SKUL" TO mo-name(n-mobj)
+    MOVE 0 TO mo-frame(n-mobj)
+    MOVE 4194310 TO mo-flags(n-mobj)
+    MOVE 0 TO mo-kind(n-mobj)
+    MOVE 4 TO mo-ai(n-mobj)
+    MOVE 0 TO mo-step(n-mobj)
+    MOVE 0 TO mo-seq(n-mobj)
+    MOVE 0 TO mo-tic(n-mobj)
+    MOVE 0 TO mo-count(n-mobj)
+    MOVE 8 TO mo-dir(n-mobj)
+    MOVE 0 TO mo-wait(n-mobj)
+    MOVE burst-ang TO mo-ang(n-mobj)
+    MOVE 3670016 TO mo-h(n-mobj)
+    MOVE 1048576 TO mo-rad(n-mobj)
+    MOVE 100 TO mo-hp(n-mobj)
+    MOVE 100 TO mo-max(n-mobj)
+    MOVE 0 TO mo-mx(n-mobj)
+    MOVE 0 TO mo-my(n-mobj)
+    MOVE 0 TO mo-mz(n-mobj)
     .
 
 fly-bolts.
@@ -1975,7 +2079,7 @@ locate-bolt.
         EXIT PARAGRAPH
     END-IF
     COMPUTE bsp-n = n-node - 1
-    PERFORM VARYING hop-n FROM 1 BY 1 UNTIL hop-n > 256
+    PERFORM VARYING hop-n FROM 1 BY 1 UNTIL hop-n > 1024
         IF bsp-n < 0
             EXIT PERFORM
         END-IF

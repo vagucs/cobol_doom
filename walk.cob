@@ -40,7 +40,7 @@ COPY "playstate.cpy".
 01 box-b BINARY-LONG.
 01 box-t BINARY-LONG.
 01 seen-gen BINARY-LONG VALUE 0.
-01 seen-ln BINARY-LONG OCCURS 1536 TIMES.
+01 seen-ln BINARY-LONG OCCURS 3200 TIMES.
 01 bsp BINARY-LONG.
 01 node-slot BINARY-LONG.
 01 sub-slot BINARY-LONG.
@@ -386,11 +386,6 @@ try-spot.
         MOVE 1 TO hit-n
         EXIT PARAGRAPH
     END-IF
-    CALL "sub_i32" USING BY VALUE floor-z BY VALUE drop-z RETURNING tmp
-    IF tmp > 1572864
-        MOVE 1 TO hit-n
-        EXIT PARAGRAPH
-    END-IF
     MOVE 0 TO hit-n
     .
 
@@ -639,7 +634,7 @@ sector-at.
         EXIT PARAGRAPH
     END-IF
     COMPUTE bsp = n-node - 1
-    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 256
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 1024
         IF bsp < 0
             EXIT PERFORM
         END-IF

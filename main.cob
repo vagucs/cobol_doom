@@ -51,6 +51,7 @@ WORKING-STORAGE SECTION.
 01 go-mode BINARY-LONG VALUE 3.
 01 fin-cmd BINARY-LONG.
 01 fin-stage BINARY-LONG.
+01 gate-n BINARY-LONG.
 01 snd-name PIC X(6).
 01 mus-loop BINARY-LONG.
 01 found PIC X(260).
@@ -84,6 +85,10 @@ COPY "sprstate.cpy".
 01 typed-n BINARY-LONG.
 01 pain-pal BINARY-LONG.
 01 pal-at BINARY-LONG.
+01 flash-n BINARY-LONG.
+01 bzc-n BINARY-LONG.
+01 rad-n BINARY-LONG.
+01 bit-n BINARY-LONG.
 01 pal-now PIC X(768).
 01 act-mode BINARY-LONG.
 01 moving BINARY-LONG.
@@ -387,6 +392,9 @@ fade-powers.
     IF ply-invis > 0
         SUBTRACT 1 FROM ply-invis
     END-IF
+    IF ply-str > 0
+        ADD 1 TO ply-str
+    END-IF
     .
 
 draw-front.
@@ -397,12 +405,17 @@ draw-front.
 
 finale-step.
     IF pressed > 0
-        MOVE 3 TO fin-cmd
+        MOVE pressed TO fin-cmd
         CALL "fin-act" USING fb fin-cmd map-name fin-stage
         IF fin-stage = 9
             PERFORM end-finale
             EXIT PARAGRAPH
         END-IF
+        IF fin-stage = 8
+            PERFORM after-story
+            EXIT PARAGRAPH
+        END-IF
+        PERFORM paint-screen
     END-IF
     CALL "video_ms" RETURNING now-ms
     CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
@@ -426,6 +439,17 @@ end-finale.
     MOVE 2 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
     MOVE 0 TO go-mode
+    MOVE 5 TO mode-n
+    .
+
+after-story.
+    MOVE 1 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 1 TO ply-keep
+    PERFORM restart-level
+    MOVE 3 TO go-mode
+    MOVE 2 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
     MOVE 5 TO mode-n
     .
 
@@ -661,14 +685,37 @@ begin-tally.
     PERFORM draw-front
     .
 
+story-gate.
+    MOVE 0 TO gate-n
+    IF map-name(1:3) NOT = "MAP"
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE map-num = FUNCTION NUMVAL(map-name(4:2))
+    IF map-num = 6 OR map-num = 11 OR map-num = 20
+        OR map-num = 30
+        MOVE 1 TO gate-n
+    END-IF
+    IF ply-secret = 1
+        IF map-num = 15 OR map-num = 31
+            MOVE 1 TO gate-n
+        END-IF
+    END-IF
+    .
+
 finish-tally.
     MOVE 1 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
-    IF map-name(1:1) = "E" AND map-name(4:1) = "8"
-        AND ply-secret = 0
+    PERFORM story-gate
+    IF gate-n = 1
+        OR (map-name(1:1) = "E" AND map-name(4:1) = "8"
+            AND ply-secret = 0)
         MOVE 1 TO fin-cmd
         CALL "fin-act" USING fb fin-cmd map-name fin-stage
-        MOVE "victor" TO snd-name
+        IF gate-n = 1
+            MOVE "read_m" TO snd-name
+        ELSE
+            MOVE "victor" TO snd-name
+        END-IF
         MOVE 1 TO mus-loop
         CALL "mus-play" USING snd-name mus-loop
         MOVE 6 TO go-mode
@@ -847,11 +894,45 @@ paint-screen.
     IF fps-on = 1
         CALL "fps-stamp" USING fb fps-show
     END-IF
-    IF ply-pain <= 0 OR pal-n < 6912
+    MOVE ply-pain TO flash-n
+    IF ply-str > 0
+        DIVIDE ply-str BY 64 GIVING bzc-n
+        SUBTRACT bzc-n FROM 12 GIVING bzc-n
+        IF bzc-n > flash-n
+            MOVE bzc-n TO flash-n
+        END-IF
+    END-IF
+    MOVE 0 TO rad-n
+    IF flash-n <= 0 AND ply-suit > 0
+        IF ply-suit > 128
+            MOVE 1 TO rad-n
+        ELSE
+            CALL "bit_and" USING BY VALUE ply-suit BY VALUE 8
+                RETURNING bit-n
+            IF bit-n NOT = 0
+                MOVE 1 TO rad-n
+            END-IF
+        END-IF
+    END-IF
+    IF flash-n <= 0 AND rad-n = 0
         CALL "video_upload" USING fb pal
         EXIT PARAGRAPH
     END-IF
-    ADD ply-pain TO 7 GIVING pain-pal
+    IF rad-n = 1
+        IF pal-n < 10752
+            CALL "video_upload" USING fb pal
+            EXIT PARAGRAPH
+        END-IF
+        MOVE 9985 TO pal-at
+        MOVE pal(pal-at:768) TO pal-now
+        CALL "video_upload" USING fb pal-now
+        EXIT PARAGRAPH
+    END-IF
+    IF pal-n < 6912
+        CALL "video_upload" USING fb pal
+        EXIT PARAGRAPH
+    END-IF
+    ADD flash-n TO 7 GIVING pain-pal
     DIVIDE pain-pal BY 8 GIVING pain-pal
     IF pain-pal > 7
         MOVE 7 TO pain-pal

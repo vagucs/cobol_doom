@@ -166,8 +166,15 @@ PROCEDURE DIVISION USING key-n did-out.
     PERFORM feed-one
     MOVE seq-at TO n-behs
     IF fired = 1
-        MOVE 100 TO ply-hp
-        MOVE 1 TO ply-pend
+        IF ply-str = 0
+            IF ply-hp < 100
+                MOVE 100 TO ply-hp
+            END-IF
+            MOVE 1 TO ply-str
+            MOVE 1 TO ply-pend
+        ELSE
+            MOVE 0 TO ply-str
+        END-IF
         MOVE "POWER-UP TOGGLED" TO note-txt
         PERFORM say-msg
     END-IF
@@ -193,6 +200,11 @@ PROCEDURE DIVISION USING key-n did-out.
     PERFORM feed-one
     MOVE seq-at TO n-beha
     IF fired = 1
+        IF ply-amap = 0
+            MOVE 1 TO ply-amap
+        ELSE
+            MOVE 0 TO ply-amap
+        END-IF
         MOVE "NO MAP" TO note-txt
         PERFORM say-msg
     END-IF

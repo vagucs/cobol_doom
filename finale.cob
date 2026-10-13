@@ -9,7 +9,7 @@
 *>
 *> www.vagucs.com.br
 *>
-*> Texto final do episodio. O piso e a letra ficam aqui. Sem rato.
+*> Texto final do episodio e do Doom 2. Depois do MAP30 vem o desfile. Sem rato.
 IDENTIFICATION DIVISION.
 PROGRAM-ID. fin-act.
 
@@ -46,7 +46,28 @@ WORKING-STORAGE SECTION.
 01 ones-n BINARY-LONG.
 01 snd-name PIC X(6).
 01 mus-loop BINARY-LONG.
-01 txt PIC X(800).
+01 txt PIC X(900).
+01 fin-pack BINARY-LONG VALUE 0.
+01 fin-map BINARY-LONG VALUE 0.
+01 flat-nm PIC X(8).
+01 cast-n BINARY-LONG VALUE 0.
+01 cast-fr BINARY-LONG VALUE 0.
+01 cast-wait BINARY-LONG VALUE 0.
+01 cast-die BINARY-LONG VALUE 0.
+01 cast-seen BINARY-LONG VALUE 0.
+01 cast-step BINARY-LONG VALUE 0.
+01 cast-diefr BINARY-LONG VALUE 6.
+01 cast-spr PIC X(4).
+01 cast-title PIC X(24).
+01 cast-snd PIC X(6).
+01 pen-x BINARY-LONG.
+01 wide-n BINARY-LONG.
+01 ch-i BINARY-LONG.
+01 line-n BINARY-LONG.
+01 flip-n BINARY-LONG.
+01 rc-n BINARY-LONG.
+01 ang-z BINARY-LONG VALUE 0.
+01 ang-w BINARY-LONG VALUE 0.
 01 e1-txt PIC X(500) VALUE
     "ONCE YOU BEAT THE BIG BADASSES AND|" &
     "CLEAN OUT THE MOON BASE YOU'RE SUPPOSED|" &
@@ -107,6 +128,69 @@ WORKING-STORAGE SECTION.
     "POTENTIAL PAIN AND GIBBITUDE AS A NATION|" &
     "OF DEMONS RUN AMOK AMONG OUR CITIES.||" &
     "NEXT STOP, HELL ON EARTH!|~".
+01 c1-txt PIC X(700) VALUE
+    "YOU HAVE ENTERED DEEPLY INTO THE INFESTED|" &
+    "STARPORT. BUT SOMETHING IS WRONG. THE|" &
+    "MONSTERS HAVE BROUGHT THEIR OWN REALITY|" &
+    "WITH THEM, AND THE STARPORT'S TECHNOLOGY|" &
+    "IS BEING SUBVERTED BY THEIR PRESENCE.||" &
+    "AHEAD, YOU SEE AN OUTPOST OF HELL, A|" &
+    "FORTIFIED ZONE. IF YOU CAN GET PAST IT,|" &
+    "YOU CAN PENETRATE INTO THE HAUNTED HEART|" &
+    "OF THE STARBASE AND FIND THE CONTROLLING|" &
+    "SWITCH WHICH HOLDS EARTH'S POPULATION|" &
+    "HOSTAGE.|~".
+01 c2-txt PIC X(900) VALUE
+    "YOU HAVE WON! YOUR VICTORY HAS ENABLED|" &
+    "HUMANKIND TO EVACUATE EARTH AND ESCAPE|" &
+    "THE NIGHTMARE.  NOW YOU ARE THE ONLY|" &
+    "HUMAN LEFT ON THE FACE OF THE PLANET.|" &
+    "CANNIBAL MUTATIONS, CARNIVOROUS ALIENS,|" &
+    "AND EVIL SPIRITS ARE YOUR ONLY NEIGHBORS.|" &
+    "YOU SIT BACK AND WAIT FOR DEATH, CONTENT|" &
+    "THAT YOU HAVE SAVED YOUR SPECIES.||" &
+    "BUT THEN, EARTH CONTROL BEAMS DOWN A|" &
+    "MESSAGE FROM SPACE: ""SENSORS HAVE LOCATED|" &
+    "THE SOURCE OF THE ALIEN INVASION. IF YOU|" &
+    "GO THERE, YOU MAY BE ABLE TO BLOCK THEIR|" &
+    "ENTRY.  THE ALIEN BASE IS IN THE HEART OF|" &
+    "YOUR OWN HOME CITY, NOT FAR FROM THE|" &
+    "STARPORT."" SLOWLY AND PAINFULLY YOU GET|" &
+    "UP AND RETURN TO THE FRAY.|~".
+01 c3-txt PIC X(600) VALUE
+    "YOU ARE AT THE CORRUPT HEART OF THE CITY,|" &
+    "SURROUNDED BY THE CORPSES OF YOUR ENEMIES.|" &
+    "YOU SEE NO WAY TO DESTROY THE CREATURES'|" &
+    "ENTRYWAY ON THIS SIDE, SO YOU CLENCH YOUR|" &
+    "TEETH AND PLUNGE THROUGH IT.||" &
+    "THERE MUST BE A WAY TO CLOSE IT ON THE|" &
+    "OTHER SIDE. WHAT DO YOU CARE IF YOU'VE|" &
+    "GOT TO GO THROUGH HELL TO GET TO IT?|~".
+01 c4-txt PIC X(800) VALUE
+    "THE HORRENDOUS VISAGE OF THE BIGGEST|" &
+    "DEMON YOU'VE EVER SEEN CRUMBLES BEFORE|" &
+    "YOU, AFTER YOU PUMP YOUR ROCKETS INTO|" &
+    "HIS EXPOSED BRAIN. THE MONSTER SHRIVELS|" &
+    "UP AND DIES, ITS THRASHING LIMBS|" &
+    "DEVASTATING UNTOLD MILES OF HELL'S|" &
+    "SURFACE.||" &
+    "YOU'VE DONE IT. THE INVASION IS OVER.|" &
+    "EARTH IS SAVED. HELL IS A WRECK. YOU|" &
+    "WONDER WHERE BAD FOLKS WILL GO WHEN THEY|" &
+    "DIE, NOW. WIPING THE SWEAT FROM YOUR|" &
+    "FOREHEAD YOU BEGIN THE LONG TREK BACK|" &
+    "HOME. REBUILDING EARTH OUGHT TO BE A|" &
+    "LOT MORE FUN THAN RUINING IT WAS.|~".
+01 c5-txt PIC X(400) VALUE
+    "CONGRATULATIONS, YOU'VE FOUND THE SECRET|" &
+    "LEVEL! LOOKS LIKE IT'S BEEN BUILT BY|" &
+    "HUMANS, RATHER THAN DEMONS. YOU WONDER|" &
+    "WHO THE INMATES OF THIS CORNER OF HELL|" &
+    "WILL BE.|~".
+01 c6-txt PIC X(300) VALUE
+    "CONGRATULATIONS, YOU'VE FOUND THE|" &
+    "SUPER SECRET LEVEL!  YOU'D BETTER|" &
+    "BLAZE THROUGH THIS ONE!|~".
 
 LINKAGE SECTION.
 01 fb PIC X(64000).
@@ -118,10 +202,10 @@ PROCEDURE DIVISION USING fb cmd map-name stage-out.
     IF cmd = 1
         PERFORM boot-fin
     ELSE
-        IF cmd = 3
-            PERFORM key-fin
-        ELSE
+        IF cmd = 2
             PERFORM tick-fin
+        ELSE
+            PERFORM key-fin
         END-IF
     END-IF
     MOVE fin-stage TO stage-out
@@ -133,7 +217,24 @@ boot-fin.
     MOVE 1 TO fin-at
     MOVE 10 TO fin-x
     MOVE 10 TO fin-y
+    MOVE 0 TO fin-pack
     MOVE 1 TO fin-ep
+    IF map-name(1:3) = "MAP"
+        PERFORM pick-pack
+    ELSE
+        PERFORM pick-episode
+    END-IF
+    MOVE 0 TO fin-len
+    PERFORM VARYING scan-i FROM 1 BY 1 UNTIL scan-i > 900
+        IF txt(scan-i:1) = "~"
+            SUBTRACT 1 FROM scan-i GIVING fin-len
+            EXIT PERFORM
+        END-IF
+    END-PERFORM
+    PERFORM paint-flat
+    .
+
+pick-episode.
     IF map-name(2:1) = "2"
         MOVE 2 TO fin-ep
     END-IF
@@ -156,17 +257,39 @@ boot-fin.
             END-IF
         END-IF
     END-IF
-    MOVE 0 TO fin-len
-    PERFORM VARYING scan-i FROM 1 BY 1 UNTIL scan-i > 800
-        IF txt(scan-i:1) = "~"
-            SUBTRACT 1 FROM scan-i GIVING fin-len
-            EXIT PERFORM
-        END-IF
-    END-PERFORM
-    PERFORM paint-flat
+    .
+
+pick-pack.
+    MOVE 1 TO fin-pack
+    COMPUTE fin-map = FUNCTION NUMVAL(map-name(4:2))
+    MOVE "SLIME16" TO flat-nm
+    MOVE c1-txt TO txt
+    IF fin-map = 11
+        MOVE "RROCK14" TO flat-nm
+        MOVE c2-txt TO txt
+    END-IF
+    IF fin-map = 15
+        MOVE "RROCK13" TO flat-nm
+        MOVE c5-txt TO txt
+    END-IF
+    IF fin-map = 20
+        MOVE "RROCK07" TO flat-nm
+        MOVE c3-txt TO txt
+    END-IF
+    IF fin-map = 30
+        MOVE "RROCK17" TO flat-nm
+        MOVE c4-txt TO txt
+    END-IF
+    IF fin-map = 31
+        MOVE "RROCK19" TO flat-nm
+        MOVE c6-txt TO txt
+    END-IF
     .
 
 paint-flat.
+    IF fin-pack = 1
+        MOVE flat-nm TO lname
+    ELSE
     IF fin-ep = 2
         MOVE "SFLR6_1" TO lname
     ELSE
@@ -179,6 +302,7 @@ paint-flat.
                 MOVE "FLOOR4_8" TO lname
             END-IF
         END-IF
+    END-IF
     END-IF
     MOVE ALL X"00" TO flat-buf
     CALL "wad-find" USING lname lump-id
@@ -196,6 +320,10 @@ paint-flat.
     .
 
 tick-fin.
+    IF fin-stage = 2
+        PERFORM cast-tick
+        EXIT PARAGRAPH
+    END-IF
     IF fin-stage NOT = 0
         ADD 1 TO fin-count
         EXIT PARAGRAPH
@@ -206,6 +334,9 @@ tick-fin.
         PERFORM one-ch
         ADD 1 TO fin-at
     END-PERFORM
+    IF fin-pack = 1
+        EXIT PARAGRAPH
+    END-IF
     COMPUTE scan-i = fin-len * 3 + 250
     IF fin-count > scan-i
         PERFORM show-art
@@ -213,7 +344,26 @@ tick-fin.
     .
 
 key-fin.
+    IF fin-stage = 2
+        IF cmd = 27
+            MOVE 9 TO fin-stage
+        ELSE
+            PERFORM cast-hit
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
     IF fin-stage = 0
+        IF fin-pack = 1
+            IF fin-count <= 50
+                EXIT PARAGRAPH
+            END-IF
+            IF fin-map = 30
+                PERFORM start-cast
+            ELSE
+                MOVE 8 TO fin-stage
+            END-IF
+            EXIT PARAGRAPH
+        END-IF
         PERFORM show-art
         EXIT PARAGRAPH
     END-IF
@@ -277,6 +427,12 @@ code-of.
     END-IF
     IF ch-c = "?"
         MOVE 63 TO code-n
+    END-IF
+    IF ch-c = ":"
+        MOVE 58 TO code-n
+    END-IF
+    IF ch-c = """"
+        MOVE 34 TO code-n
     END-IF
     .
 
@@ -364,6 +520,266 @@ show-art.
         MOVE "bunny" TO snd-name
         MOVE 1 TO mus-loop
         CALL "mus-play" USING snd-name mus-loop
+    END-IF
+    .
+
+start-cast.
+    MOVE 2 TO fin-stage
+    MOVE 0 TO cast-n
+    MOVE 0 TO cast-die
+    MOVE 0 TO cast-fr
+    MOVE 0 TO cast-seen
+    MOVE 0 TO cast-step
+    MOVE 8 TO cast-wait
+    PERFORM load-cast
+    PERFORM draw-cast
+    MOVE "evil" TO snd-name
+    MOVE 1 TO mus-loop
+    CALL "mus-play" USING snd-name mus-loop
+    .
+
+cast-hit.
+    IF cast-die = 1
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO cast-die
+    MOVE 0 TO cast-step
+    MOVE cast-diefr TO cast-fr
+    MOVE 6 TO cast-wait
+    MOVE "dmpain" TO snd-name
+    IF cast-spr = "POSS" OR cast-spr = "SPOS"
+        OR cast-spr = "CPOS"
+        MOVE "popain" TO snd-name
+    END-IF
+    IF cast-spr = "PLAY"
+        MOVE "pldeth" TO snd-name
+    END-IF
+    CALL "sfx-play" USING snd-name
+    PERFORM draw-cast
+    .
+
+cast-tick.
+    IF cast-wait > 0
+        SUBTRACT 1 FROM cast-wait
+        PERFORM draw-cast
+        EXIT PARAGRAPH
+    END-IF
+    IF cast-die = 1
+        ADD 1 TO cast-step
+        ADD 1 TO cast-fr
+        MOVE 6 TO cast-wait
+        IF cast-step >= 5
+            PERFORM next-cast
+        END-IF
+    ELSE
+        IF cast-fr >= 4
+            MOVE 0 TO cast-fr
+            MOVE 8 TO cast-wait
+        ELSE
+            IF cast-fr = 0
+                MOVE 1 TO cast-fr
+            ELSE
+                MOVE 0 TO cast-fr
+            END-IF
+            ADD 1 TO cast-seen
+            MOVE 8 TO cast-wait
+            IF cast-seen >= 12
+                MOVE 0 TO cast-seen
+                MOVE 4 TO cast-fr
+                MOVE 12 TO cast-wait
+                CALL "sfx-play" USING cast-snd
+            END-IF
+        END-IF
+    END-IF
+    PERFORM draw-cast
+    .
+
+next-cast.
+    ADD 1 TO cast-n
+    IF cast-n > 16
+        MOVE 0 TO cast-n
+    END-IF
+    MOVE 0 TO cast-die
+    MOVE 0 TO cast-fr
+    MOVE 0 TO cast-seen
+    MOVE 0 TO cast-step
+    MOVE 8 TO cast-wait
+    PERFORM load-cast
+    .
+
+load-cast.
+    MOVE "POSS" TO cast-spr
+    MOVE "ZOMBIEMAN" TO cast-title
+    MOVE "pistol" TO cast-snd
+    MOVE 7 TO cast-diefr
+    IF cast-n = 1
+        MOVE "SPOS" TO cast-spr
+        MOVE "SHOTGUN GUY" TO cast-title
+        MOVE "shotgn" TO cast-snd
+        MOVE 7 TO cast-diefr
+    END-IF
+    IF cast-n = 2
+        MOVE "CPOS" TO cast-spr
+        MOVE "HEAVY WEAPON DUDE" TO cast-title
+        MOVE "shotgn" TO cast-snd
+        MOVE 7 TO cast-diefr
+    END-IF
+    IF cast-n = 3
+        MOVE "TROO" TO cast-spr
+        MOVE "IMP" TO cast-title
+        MOVE "claw" TO cast-snd
+        MOVE 8 TO cast-diefr
+    END-IF
+    IF cast-n = 4
+        MOVE "SARG" TO cast-spr
+        MOVE "DEMON" TO cast-title
+        MOVE "sgtatk" TO cast-snd
+        MOVE 8 TO cast-diefr
+    END-IF
+    IF cast-n = 5
+        MOVE "SKUL" TO cast-spr
+        MOVE "LOST SOUL" TO cast-title
+        MOVE "sklatk" TO cast-snd
+        MOVE 2 TO cast-diefr
+    END-IF
+    IF cast-n = 6
+        MOVE "HEAD" TO cast-spr
+        MOVE "CACODEMON" TO cast-title
+        MOVE "firsht" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 7
+        MOVE "BOS2" TO cast-spr
+        MOVE "HELL KNIGHT" TO cast-title
+        MOVE "firsht" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 8
+        MOVE "BOSS" TO cast-spr
+        MOVE "BARON OF HELL" TO cast-title
+        MOVE "firsht" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 9
+        MOVE "BSPI" TO cast-spr
+        MOVE "ARACHNOTRON" TO cast-title
+        MOVE "plasma" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 10
+        MOVE "PAIN" TO cast-spr
+        MOVE "PAIN ELEMENTAL" TO cast-title
+        MOVE "sklatk" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 11
+        MOVE "SKEL" TO cast-spr
+        MOVE "REVENANT" TO cast-title
+        MOVE "skeatk" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 12
+        MOVE "FATT" TO cast-spr
+        MOVE "MANCUBUS" TO cast-title
+        MOVE "firsht" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 13
+        MOVE "VILE" TO cast-spr
+        MOVE "ARCH-VILE" TO cast-title
+        MOVE "vilatk" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 14
+        MOVE "SPID" TO cast-spr
+        MOVE "THE SPIDER MASTERMIND" TO cast-title
+        MOVE "shotgn" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 15
+        MOVE "CYBR" TO cast-spr
+        MOVE "THE CYBERDEMON" TO cast-title
+        MOVE "rlaunc" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    IF cast-n = 16
+        MOVE "PLAY" TO cast-spr
+        MOVE "OUR HERO" TO cast-title
+        MOVE "shotgn" TO cast-snd
+        MOVE 6 TO cast-diefr
+    END-IF
+    .
+
+draw-cast.
+    MOVE ALL X"00" TO fb
+    MOVE "BOSSBACK" TO lname
+    CALL "wad-find" USING lname lump-id
+    IF lump-id >= 0
+        CALL "wad-read-num" USING lump-id art-buf cap-art nread
+        IF nread >= 8
+            MOVE 0 TO fin-x
+            MOVE 0 TO fin-y
+            CALL "v-draw-patch" USING fb art-buf nread ink-n
+                fin-x fin-y
+        END-IF
+    END-IF
+    PERFORM cast-print
+    MOVE 0 TO ang-z
+    MOVE 0 TO ang-w
+    CALL "spr-lookup" USING cast-spr cast-fr ang-z ang-w
+        lump-id flip-n rc-n
+    IF rc-n = 0 AND lump-id >= 0
+        CALL "wad-read-num" USING lump-id art-buf cap-art nread
+        IF nread >= 8
+            MOVE 160 TO col-x
+            MOVE 170 TO row-y
+            CALL "v-draw-patch" USING fb art-buf nread ink-n
+                col-x row-y
+        END-IF
+    END-IF
+    .
+
+cast-print.
+    MOVE FUNCTION LENGTH(FUNCTION TRIM(cast-title)) TO line-n
+    IF line-n < 1
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO wide-n
+    PERFORM VARYING ch-i FROM 1 BY 1 UNTIL ch-i > line-n
+        MOVE cast-title(ch-i:1) TO ch-c
+        PERFORM glyph-span
+        ADD glyph-w TO wide-n
+    END-PERFORM
+    DIVIDE wide-n BY 2 GIVING pen-x
+    SUBTRACT pen-x FROM 160 GIVING fin-x
+    MOVE 10 TO fin-y
+    PERFORM VARYING ch-i FROM 1 BY 1 UNTIL ch-i > line-n
+        MOVE cast-title(ch-i:1) TO ch-c
+        IF ch-c = " "
+            ADD 4 TO fin-x
+        ELSE
+            PERFORM code-of
+            PERFORM load-glyph
+            IF nread >= 8
+                CALL "v-draw-patch" USING fb patch nread ink-n
+                    fin-x fin-y
+                ADD glyph-w TO fin-x
+            ELSE
+                ADD 4 TO fin-x
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+glyph-span.
+    IF ch-c = " "
+        MOVE 4 TO glyph-w
+    ELSE
+        PERFORM code-of
+        PERFORM load-glyph
+        IF nread < 8
+            MOVE 4 TO glyph-w
+        END-IF
     END-IF
     .
 

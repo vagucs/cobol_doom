@@ -40,7 +40,7 @@ COPY "playstate.cpy".
 01 vp-max BINARY-LONG OCCURS 128 TIMES.
 01 vp-top BINARY-LONG OCCURS 40960 TIMES.
 01 vp-bot BINARY-LONG OCCURS 40960 TIMES.
-01 stk-n BINARY-LONG OCCURS 768 TIMES.
+01 stk-n BINARY-LONG OCCURS 1024 TIMES.
 01 dc-src PIC X(128).
 01 flat-buf PIC X(4096).
 01 flat-have BINARY-LONG VALUE -1.
@@ -430,6 +430,8 @@ main-view.
         MOVE 0 TO ply-suit
         MOVE 0 TO ply-lite
         MOVE 0 TO ply-invis
+        MOVE 0 TO ply-str
+        MOVE 0 TO ply-amap
         MOVE 0 TO ply-exit
         MOVE 0 TO ply-time
         MOVE 0 TO ply-pain
@@ -700,7 +702,7 @@ point-in-sub.
         EXIT PARAGRAPH
     END-IF
     COMPUTE bsp = n-node - 1
-    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 256
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 1024
         IF bsp < 0
             EXIT PERFORM
         END-IF

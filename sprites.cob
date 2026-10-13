@@ -263,7 +263,7 @@ PROCEDURE DIVISION.
     GOBACK.
 
 place-one.
-    IF n-mobj >= 512
+    IF n-mobj >= 768
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO row-i
@@ -411,7 +411,7 @@ locate-floor.
         EXIT PARAGRAPH
     END-IF
     COMPUTE bsp = n-node - 1
-    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 256
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 1024
         IF bsp < 0
             EXIT PERFORM
         END-IF

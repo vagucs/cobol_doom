@@ -9,7 +9,7 @@
 *>
 *> www.vagucs.com.br
 *>
-*> Itens do chao. Vida, armadura, municao, chaves e armas.
+*> Itens do chao. Vida, armadura, municao, chaves, armas e poderes.
 IDENTIFICATION DIVISION.
 PROGRAM-ID. item-tic.
 
@@ -71,7 +71,13 @@ try-one.
             OR item-n = "BFUG" OR item-n = "CSAW"
             MOVE "wpnup" TO snd-name
         ELSE
-            MOVE "itemup" TO snd-name
+            IF item-n = "PINV" OR item-n = "PSTR"
+                OR item-n = "PINS" OR item-n = "SUIT"
+                OR item-n = "PMAP" OR item-n = "PVIS"
+                MOVE "getpow" TO snd-name
+            ELSE
+                MOVE "itemup" TO snd-name
+            END-IF
         END-IF
         CALL "sfx-play" USING snd-name
         ADD 1 TO ply-items
@@ -252,6 +258,48 @@ apply-item.
         MOVE 1 TO took
         IF ply-weap NOT = 8
             MOVE 8 TO ply-pend
+        END-IF
+    END-IF
+    IF item-n = "PINV"
+        MOVE 1050 TO ply-inv
+        MOVE "INVULNERABILITY!" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 1 TO took
+    END-IF
+    IF item-n = "PSTR"
+        IF ply-hp < 100
+            MOVE 100 TO ply-hp
+        END-IF
+        MOVE 1 TO ply-str
+        MOVE 1 TO ply-pend
+        MOVE "BERSERK!" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 1 TO took
+    END-IF
+    IF item-n = "PINS"
+        MOVE 2100 TO ply-invis
+        MOVE "PARTIAL INVISIBILITY" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 1 TO took
+    END-IF
+    IF item-n = "SUIT"
+        MOVE 2100 TO ply-suit
+        MOVE "RADIATION SHIELDING SUIT" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 1 TO took
+    END-IF
+    IF item-n = "PVIS"
+        MOVE 4200 TO ply-lite
+        MOVE "LIGHT AMPLIFICATION VISOR" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 1 TO took
+    END-IF
+    IF item-n = "PMAP"
+        IF ply-amap = 0
+            MOVE 1 TO ply-amap
+            MOVE "COMPUTER AREA MAP" TO ply-msg
+            MOVE 140 TO ply-msgn
+            MOVE 1 TO took
         END-IF
     END-IF
     .

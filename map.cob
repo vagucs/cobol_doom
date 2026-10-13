@@ -18,8 +18,8 @@ PROGRAM-ID. map-load.
 DATA DIVISION.
 WORKING-STORAGE SECTION.
 COPY "mapstate.cpy".
-01 lump-buf PIC X(65536).
-01 cap-n BINARY-LONG VALUE 65536.
+01 lump-buf PIC X(131072).
+01 cap-n BINARY-LONG VALUE 131072.
 01 lump-id BINARY-LONG.
 01 lump-delta BINARY-LONG.
 01 lump-len BINARY-LONG.
@@ -100,7 +100,7 @@ load-vertexes.
     MOVE 4 TO lump-delta
     PERFORM read-at
     COMPUTE n-vertex = lump-len / 4
-    IF n-vertex > 1536
+    IF n-vertex > 3200
         MOVE "vertices demais" TO reason
         PERFORM fail-map
     END-IF
@@ -121,7 +121,7 @@ load-sectors.
     MOVE 8 TO lump-delta
     PERFORM read-at
     COMPUTE n-sector = lump-len / 26
-    IF n-sector > 256
+    IF n-sector > 512
         MOVE "setores demais" TO reason
         PERFORM fail-map
     END-IF
@@ -160,7 +160,7 @@ load-sides.
     MOVE 3 TO lump-delta
     PERFORM read-at
     COMPUTE n-side = lump-len / 30
-    IF n-side > 2048
+    IF n-side > 3200
         MOVE "lados demais" TO reason
         PERFORM fail-map
     END-IF
@@ -198,7 +198,7 @@ load-lines.
     MOVE 2 TO lump-delta
     PERFORM read-at
     COMPUTE n-line = lump-len / 14
-    IF n-line > 1536
+    IF n-line > 3200
         MOVE "linhas demais" TO reason
         PERFORM fail-map
     END-IF
@@ -270,7 +270,7 @@ load-segs.
     MOVE 5 TO lump-delta
     PERFORM read-at
     COMPUTE n-seg = lump-len / 12
-    IF n-seg > 2048
+    IF n-seg > 3200
         MOVE "segs demais" TO reason
         PERFORM fail-map
     END-IF
@@ -339,7 +339,7 @@ load-ssectors.
     MOVE 6 TO lump-delta
     PERFORM read-at
     COMPUTE n-ssector = lump-len / 4
-    IF n-ssector > 768
+    IF n-ssector > 1024
         MOVE "subsectors demais" TO reason
         PERFORM fail-map
     END-IF
@@ -359,7 +359,7 @@ load-nodes.
     MOVE 7 TO lump-delta
     PERFORM read-at
     COMPUTE n-node = lump-len / 28
-    IF n-node > 768
+    IF n-node > 1024
         MOVE "nodes demais" TO reason
         PERFORM fail-map
     END-IF
@@ -398,7 +398,7 @@ load-things.
     MOVE 1 TO lump-delta
     PERFORM read-at
     COMPUTE n-thing = lump-len / 10
-    IF n-thing > 768
+    IF n-thing > 1024
         MOVE "things demais" TO reason
         PERFORM fail-map
     END-IF
@@ -426,7 +426,7 @@ load-blockmap.
     MOVE 10 TO lump-delta
     PERFORM read-at
     COMPUTE n-block = lump-len / 2
-    IF n-block > 12288
+    IF n-block > 16384
         MOVE "blockmap demais" TO reason
         PERFORM fail-map
     END-IF
@@ -450,7 +450,7 @@ load-blockmap.
 load-reject.
     MOVE 9 TO lump-delta
     PERFORM read-at
-    IF lump-len > 8192
+    IF lump-len > 32768
         MOVE "reject demais" TO reason
         PERFORM fail-map
     END-IF
@@ -510,7 +510,7 @@ add-sec-line.
     IF sec-slot < 1 OR sec-slot > n-sector
         EXIT PARAGRAPH
     END-IF
-    IF pool-n >= 2048
+    IF pool-n >= 4096
         MOVE "listas de setor demais" TO reason
         PERFORM fail-map
     END-IF
