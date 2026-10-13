@@ -835,6 +835,7 @@ skul-one.
     ELSE
         MOVE 0 TO mo-frame(who-i)
     END-IF
+    MOVE 1 TO moved-out
     IF mo-ai(who-i) = 0
         MOVE 1 TO need-face
         PERFORM can-see
@@ -1339,7 +1340,13 @@ spot-free.
     MOVE mo-y(who-i) TO oy
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR step-ok = 0
         PERFORM cross-one
-        IF did-cross = 1 AND frac > 0 AND frac < 65536
+        IF did-cross = 0
+            PERFORM ball-near
+        END-IF
+        IF did-cross = 1 AND frac >= 65536
+            MOVE 0 TO did-cross
+        END-IF
+        IF did-cross = 1
             PERFORM open-of
             IF two-side = 0
                 MOVE 0 TO step-ok

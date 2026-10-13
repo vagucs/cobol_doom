@@ -235,23 +235,23 @@ COPY "playstate.cpy".
 01 n-ds BINARY-LONG VALUE 0.
 01 ds-pool BINARY-LONG VALUE 0.
 01 scale-save BINARY-LONG.
-01 ds-x1 BINARY-LONG OCCURS 128 TIMES.
-01 ds-x2 BINARY-LONG OCCURS 128 TIMES.
-01 ds-sc1 BINARY-LONG OCCURS 128 TIMES.
-01 ds-sc2 BINARY-LONG OCCURS 128 TIMES.
-01 ds-sil BINARY-LONG OCCURS 128 TIMES.
-01 ds-bsil BINARY-LONG OCCURS 128 TIMES.
-01 ds-tsil BINARY-LONG OCCURS 128 TIMES.
-01 ds-seg BINARY-LONG OCCURS 128 TIMES.
-01 ds-mask BINARY-LONG OCCURS 128 TIMES.
-01 ds-c0 BINARY-LONG OCCURS 128 TIMES.
-01 ds-nclip BINARY-LONG OCCURS 128 TIMES.
-01 ds-mtex BINARY-LONG OCCURS 128 TIMES.
-01 ds-mmid BINARY-LONG OCCURS 128 TIMES.
-01 ds-top BINARY-LONG OCCURS 8192 TIMES.
-01 ds-bot BINARY-LONG OCCURS 8192 TIMES.
-01 ds-mcol BINARY-LONG OCCURS 8192 TIMES.
-01 ds-mlit BINARY-LONG OCCURS 8192 TIMES.
+01 ds-x1 BINARY-LONG OCCURS 256 TIMES.
+01 ds-x2 BINARY-LONG OCCURS 256 TIMES.
+01 ds-sc1 BINARY-LONG OCCURS 256 TIMES.
+01 ds-sc2 BINARY-LONG OCCURS 256 TIMES.
+01 ds-sil BINARY-LONG OCCURS 256 TIMES.
+01 ds-bsil BINARY-LONG OCCURS 256 TIMES.
+01 ds-tsil BINARY-LONG OCCURS 256 TIMES.
+01 ds-seg BINARY-LONG OCCURS 256 TIMES.
+01 ds-mask BINARY-LONG OCCURS 256 TIMES.
+01 ds-c0 BINARY-LONG OCCURS 256 TIMES.
+01 ds-nclip BINARY-LONG OCCURS 256 TIMES.
+01 ds-mtex BINARY-LONG OCCURS 256 TIMES.
+01 ds-mmid BINARY-LONG OCCURS 256 TIMES.
+01 ds-top BINARY-LONG OCCURS 32768 TIMES.
+01 ds-bot BINARY-LONG OCCURS 32768 TIMES.
+01 ds-mcol BINARY-LONG OCCURS 32768 TIMES.
+01 ds-mlit BINARY-LONG OCCURS 32768 TIMES.
 01 mhold-col BINARY-LONG OCCURS 320 TIMES.
 01 mhold-lit BINARY-LONG OCCURS 320 TIMES.
 01 n-vis BINARY-LONG.
@@ -1930,7 +1930,7 @@ tex-height.
     .
 
 push-drawseg.
-    IF n-ds >= 128
+    IF n-ds >= 256
         EXIT PARAGRAPH
     END-IF
     ADD 1 TO n-ds
@@ -1964,7 +1964,7 @@ push-drawseg.
         MOVE -2147483647 TO ds-tsil(n-ds)
         PERFORM VARYING k FROM 0 BY 1 UNTIL k >= sh
             COMPUTE slot = ds-pool + 1 + k
-            IF slot >= 1 AND slot <= 8192
+            IF slot >= 1 AND slot <= 32768
                 MOVE view-h TO ds-top(slot)
                 MOVE -1 TO ds-bot(slot)
             END-IF
@@ -2015,7 +2015,7 @@ push-drawseg.
         PERFORM VARYING k FROM 0 BY 1 UNTIL k >= sh
             COMPUTE slot = ds-pool + 1 + k
             COMPUTE peek = rng-a + k + 1
-            IF slot >= 1 AND slot <= 8192
+            IF slot >= 1 AND slot <= 32768
                 AND peek >= 1 AND peek <= 320
                 MOVE ceil-clip(peek) TO ds-top(slot)
                 MOVE floor-clip(peek) TO ds-bot(slot)
@@ -2023,6 +2023,19 @@ push-drawseg.
                 MOVE mhold-lit(peek) TO ds-mlit(slot)
             END-IF
         END-PERFORM
+        IF sec-ceil-h(back-sec) <= sec-floor-h(front-sec)
+            OR sec-floor-h(back-sec) >= sec-ceil-h(front-sec)
+            MOVE 3 TO ds-sil(n-ds)
+            MOVE 2147483647 TO ds-bsil(n-ds)
+            MOVE -2147483647 TO ds-tsil(n-ds)
+            PERFORM VARYING k FROM 0 BY 1 UNTIL k >= sh
+                COMPUTE slot = ds-pool + 1 + k
+                IF slot >= 1 AND slot <= 32768
+                    MOVE view-h TO ds-top(slot)
+                    MOVE -1 TO ds-bot(slot)
+                END-IF
+            END-PERFORM
+        END-IF
     END-IF
     ADD sh TO ds-pool
     .
@@ -2079,7 +2092,7 @@ paint-mask.
     MOVE r1 TO x-i
     PERFORM UNTIL x-i > r2
         COMPUTE slot = ds-c0(di) + x-i - ds-x1(di)
-        IF slot >= 1 AND slot <= 8192
+        IF slot >= 1 AND slot <= 32768
             AND x-i >= 0 AND x-i < view-w
             AND ds-mlit(slot) >= 0
             MOVE ds-mcol(slot) TO col-n
@@ -2527,7 +2540,7 @@ clip-one-seg.
         MOVE ds-sc1(di) TO lo-sc
     END-IF
     MOVE 0 TO bit-n
-    IF hi-sc < cur-sc
+    IF hi-sc > 0 AND hi-sc < cur-sc
         MOVE 1 TO bit-n
     ELSE
         IF lo-sc < cur-sc
@@ -2552,7 +2565,7 @@ clip-one-seg.
         IF clip-i >= 0 AND clip-i < ds-nclip(di)
             COMPUTE slot = ds-c0(di) + clip-i
             COMPUTE peek = x-i + 1
-            IF slot >= 1 AND slot <= 8192
+            IF slot >= 1 AND slot <= 32768
                 AND peek >= 1 AND peek <= 320
                 CALL "bit_and" USING BY VALUE sil-n BY VALUE 2
                     RETURNING flag-n
@@ -2619,8 +2632,10 @@ on-seg-side.
         RETURNING dx
     CALL "sub_i32" USING BY VALUE cur-gy BY VALUE vtx-y(v1-slot)
         RETURNING dy
-    CALL "fixed_mul" USING BY VALUE ldy BY VALUE dx RETURNING left-v
-    CALL "fixed_mul" USING BY VALUE dy BY VALUE ldx RETURNING right-v
+    CALL "shar32" USING BY VALUE ldy BY VALUE 8 RETURNING tmp
+    CALL "fixed_mul" USING BY VALUE tmp BY VALUE dx RETURNING left-v
+    CALL "shar32" USING BY VALUE ldx BY VALUE 8 RETURNING tmp
+    CALL "fixed_mul" USING BY VALUE dy BY VALUE tmp RETURNING right-v
     IF right-v < left-v
         MOVE 0 TO side-bit
     ELSE

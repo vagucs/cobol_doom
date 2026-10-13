@@ -33,7 +33,29 @@ static SDL_Texture *texture = NULL;
 static Uint32 *pixels = NULL;
 static int tex_w = 0;
 static int tex_h = 0;
+static int win_w = 0;
+static int win_h = 0;
+static int fullscreen = 0;
 static int sdl_up = 0;
+
+static void toggle_fullscreen(void)
+{
+    if (window == NULL)
+        return;
+    if (!fullscreen) {
+        SDL_GetWindowSize(window, &win_w, &win_h);
+        if (SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0)
+            fullscreen = 1;
+        return;
+    }
+    if (SDL_SetWindowFullscreen(window, 0) == 0) {
+        fullscreen = 0;
+        if (win_w > 0 && win_h > 0)
+            SDL_SetWindowSize(window, win_w, win_h);
+        SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED);
+    }
+}
 
 static void ignore_mouse(void)
 {
@@ -74,6 +96,9 @@ int video_init(int w, int h, int scale)
         return 6;
     tex_w = w;
     tex_h = h;
+    win_w = w * scale;
+    win_h = h * scale;
+    fullscreen = 0;
     return 0;
 }
 
@@ -125,7 +150,11 @@ int video_set_scale(int scale)
         scale = 1;
     if (scale > 4)
         scale = 4;
-    SDL_SetWindowSize(window, tex_w * scale, tex_h * scale);
+    win_w = tex_w * scale;
+    win_h = tex_h * scale;
+    if (fullscreen)
+        return 0;
+    SDL_SetWindowSize(window, win_w, win_h);
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED);
     return 0;
@@ -188,6 +217,13 @@ int video_poll(void)
             return -1;
         if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
             remember_key(&event.key);
+        if (event.type == SDL_KEYDOWN && !event.key.repeat
+            && (event.key.keysym.sym == SDLK_RETURN
+                || event.key.keysym.sym == SDLK_KP_ENTER)
+            && (event.key.keysym.mod & KMOD_ALT)) {
+            toggle_fullscreen();
+            continue;
+        }
         if (found == 0 && event.type == SDL_KEYDOWN && !event.key.repeat)
             found = (int)event.key.keysym.sym;
     }

@@ -105,6 +105,9 @@ WORKING-STORAGE SECTION.
 01 n-sw BINARY-LONG VALUE 0.
 01 sw-a BINARY-LONG OCCURS 64 TIMES.
 01 sw-b BINARY-LONG OCCURS 64 TIMES.
+01 sw-na PIC X(8) OCCURS 64 TIMES.
+01 sw-nb PIC X(8) OCCURS 64 TIMES.
+01 hit-tag BINARY-LONG.
 01 sw-buf PIC X(8192).
 01 sw-len BINARY-LONG.
 01 sw-at BINARY-LONG.
@@ -118,6 +121,8 @@ WORKING-STORAGE SECTION.
 01 swapped BINARY-LONG.
 01 pair-i BINARY-LONG.
 01 got-sw BINARY-LONG.
+01 pend-tag BINARY-LONG VALUE 0.
+01 other-sw BINARY-LONG.
 01 key-ok BINARY-LONG.
 01 step-h BINARY-LONG.
 01 spd-h BINARY-LONG.
@@ -185,6 +190,7 @@ init-doors.
     PERFORM VARYING fl-i FROM 1 BY 1 UNTIL fl-i > 32
         MOVE 0 TO fl-on(fl-i)
     END-PERFORM
+    MOVE 0 TO pend-tag
     .
 
 scan-cross.
@@ -225,11 +231,89 @@ scan-cross.
     .
 
 start-lower.
+    MOVE 262144 TO spd-h
+    MOVE 0 TO got-sw
     PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
         IF sec-tag(sec-slot) = ln-tag(li)
             PERFORM arm-floor
         END-IF
     END-PERFORM
+    .
+
+lower-surround.
+    MOVE 65536 TO spd-h
+    MOVE 0 TO got-sw
+    MOVE 0 TO hit-tag
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li)
+            MOVE 1 TO hit-tag
+            PERFORM arm-floor
+        END-IF
+    END-PERFORM
+    IF got-sw = 1
+        MOVE "stnmov" TO snd-name
+        CALL "sfx-play" USING snd-name
+    END-IF
+    .
+
+find-other-switch.
+    MOVE 0 TO other-sw
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > n-line
+        IF step-n NOT = li AND ln-spec(step-n) = 103
+            COMPUTE fs = ln-front(step-n) + 1
+            IF fs >= 1 AND fs <= n-sector
+                IF sec-tag(fs) = ln-tag(li)
+                    MOVE 1 TO other-sw
+                END-IF
+            END-IF
+            IF ln-back(step-n) >= 0
+                COMPUTE bs = ln-back(step-n) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-tag(bs) = ln-tag(li)
+                        MOVE 1 TO other-sw
+                    END-IF
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+touch-pending.
+    MOVE 0 TO other-sw
+    COMPUTE fs = ln-front(li) + 1
+    IF fs >= 1 AND fs <= n-sector
+        IF sec-tag(fs) = pend-tag
+            MOVE 1 TO other-sw
+        END-IF
+    END-IF
+    IF ln-back(li) >= 0
+        COMPUTE bs = ln-back(li) + 1
+        IF bs >= 1 AND bs <= n-sector
+            IF sec-tag(bs) = pend-tag
+                MOVE 1 TO other-sw
+            END-IF
+        END-IF
+    END-IF
+    .
+
+release-floor.
+    MOVE pend-tag TO tmp-n
+    MOVE 0 TO pend-tag
+    MOVE 65536 TO spd-h
+    MOVE 0 TO got-sw
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = tmp-n
+            PERFORM arm-floor
+        END-IF
+    END-PERFORM
+    IF got-sw = 1
+        MOVE "stnmov" TO snd-name
+        CALL "sfx-play" USING snd-name
+        MOVE 1 TO moved-out
+    END-IF
     .
 
 arm-floor.
@@ -271,11 +355,12 @@ arm-floor.
     MOVE 1 TO fl-on(fl-i)
     MOVE sec-slot TO fl-sec(fl-i)
     MOVE nb-h TO fl-dest(fl-i)
-    MOVE 262144 TO fl-spd(fl-i)
+    MOVE spd-h TO fl-spd(fl-i)
     MOVE -1 TO fl-dir(fl-i)
     MOVE 0 TO fl-wait(fl-i)
     MOVE 0 TO fl-kind(fl-i)
     MOVE nb-h TO fl-high(fl-i)
+    MOVE 1 TO got-sw
     .
 
 note-neighbor.
@@ -421,6 +506,25 @@ need-key.
         END-IF
     END-IF
     IF spec-n = 28 OR spec-n = 33
+        IF ply-k2 = 1 OR ply-k5 = 1
+            MOVE 1 TO key-ok
+        END-IF
+    END-IF
+    .
+
+blaze-key.
+    MOVE 0 TO key-ok
+    IF spec-n = 99 OR spec-n = 133
+        IF ply-k0 = 1 OR ply-k3 = 1
+            MOVE 1 TO key-ok
+        END-IF
+    END-IF
+    IF spec-n = 136 OR spec-n = 137
+        IF ply-k1 = 1 OR ply-k4 = 1
+            MOVE 1 TO key-ok
+        END-IF
+    END-IF
+    IF spec-n = 134 OR spec-n = 135
         IF ply-k2 = 1 OR ply-k5 = 1
             MOVE 1 TO key-ok
         END-IF
@@ -788,6 +892,18 @@ try-spec.
         PERFORM spawn-door
         EXIT PARAGRAPH
     END-IF
+    IF spec-n = 99 OR spec-n = 133
+        OR spec-n = 134 OR spec-n = 135
+        OR spec-n = 136 OR spec-n = 137
+        PERFORM blaze-key
+        IF key-ok = 0
+            MOVE "oof" TO snd-name
+            CALL "sfx-play" USING snd-name
+            EXIT PARAGRAPH
+        END-IF
+        PERFORM tag-doors
+        EXIT PARAGRAPH
+    END-IF
     IF spec-n = 7 OR spec-n = 127
         MOVE 524288 TO step-h
         MOVE 16384 TO spd-h
@@ -799,6 +915,27 @@ try-spec.
         IF got-sw = 1
             PERFORM flip-switch
             MOVE 0 TO ln-spec(li)
+            MOVE 1 TO moved-out
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF spec-n = 102 OR spec-n = 45
+        IF spec-n = 102
+            PERFORM find-other-switch
+            IF other-sw = 1
+                MOVE ln-tag(li) TO pend-tag
+                PERFORM flip-switch
+                MOVE 0 TO ln-spec(li)
+                MOVE 1 TO moved-out
+                EXIT PARAGRAPH
+            END-IF
+        END-IF
+        PERFORM lower-surround
+        IF got-sw = 1 OR hit-tag = 1
+            PERFORM flip-switch
+            IF spec-n = 102
+                MOVE 0 TO ln-spec(li)
+            END-IF
             MOVE 1 TO moved-out
         END-IF
         EXIT PARAGRAPH
@@ -1009,6 +1146,11 @@ tag-doors.
     IF spec-n = 112 OR spec-n = 115
         MOVE 6 TO dtype
     END-IF
+    IF spec-n = 99 OR spec-n = 133
+        OR spec-n = 134 OR spec-n = 135
+        OR spec-n = 136 OR spec-n = 137
+        MOVE 6 TO dtype
+    END-IF
     MOVE 0 TO got-sw
     IF ln-tag(li) = 0
         EXIT PARAGRAPH
@@ -1025,12 +1167,19 @@ tag-doors.
     PERFORM flip-switch
     MOVE 1 TO moved-out
     IF spec-n = 29 OR spec-n = 103 OR spec-n = 111 OR spec-n = 112
+        OR spec-n = 133 OR spec-n = 135 OR spec-n = 137
         MOVE 0 TO ln-spec(li)
+    END-IF
+    IF spec-n = 103 AND pend-tag NOT = 0
+        PERFORM touch-pending
+        IF other-sw = 1
+            PERFORM release-floor
+        END-IF
     END-IF
     .
 
 flip-switch.
-    IF sw-on = 0
+    IF sw-on = 0 OR n-sw = 0
         PERFORM load-switches
     END-IF
     IF n-sw = 0
@@ -1044,9 +1193,24 @@ flip-switch.
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO swapped
+    MOVE sd-tname(sd-i) TO name-a
     MOVE 1 TO tmp-n
-    MOVE sd-top(sd-i) TO tex-n
-    PERFORM swap-tex
+    PERFORM swap-name
+    IF swapped = 0
+        MOVE sd-mname(sd-i) TO name-a
+        MOVE 2 TO tmp-n
+        PERFORM swap-name
+    END-IF
+    IF swapped = 0
+        MOVE sd-bname(sd-i) TO name-a
+        MOVE 3 TO tmp-n
+        PERFORM swap-name
+    END-IF
+    IF swapped = 0
+        MOVE 1 TO tmp-n
+        MOVE sd-top(sd-i) TO tex-n
+        PERFORM swap-tex
+    END-IF
     IF swapped = 0
         MOVE 2 TO tmp-n
         MOVE sd-mid(sd-i) TO tex-n
@@ -1061,16 +1225,41 @@ flip-switch.
         EXIT PARAGRAPH
     END-IF
     IF tmp-n = 1
+        MOVE name-b TO sd-tname(sd-i)
         MOVE tex-n TO sd-top(sd-i)
     END-IF
     IF tmp-n = 2
+        MOVE name-b TO sd-mname(sd-i)
         MOVE tex-n TO sd-mid(sd-i)
     END-IF
     IF tmp-n = 3
+        MOVE name-b TO sd-bname(sd-i)
         MOVE tex-n TO sd-bot(sd-i)
     END-IF
     MOVE "swtchn" TO snd-name
     CALL "sfx-play" USING snd-name
+    .
+
+swap-name.
+    PERFORM VARYING pair-i FROM 1 BY 1 UNTIL pair-i > n-sw
+        OR swapped = 1
+        IF name-a = sw-na(pair-i)
+            MOVE sw-nb(pair-i) TO name-b
+            MOVE 1 TO swapped
+        ELSE
+            IF name-a = sw-nb(pair-i)
+                MOVE sw-na(pair-i) TO name-b
+                MOVE 1 TO swapped
+            END-IF
+        END-IF
+    END-PERFORM
+    IF swapped = 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "tex-num" USING name-b tex-n
+    IF tex-n <= 0
+        MOVE 0 TO swapped
+    END-IF
     .
 
 swap-tex.
@@ -1078,10 +1267,12 @@ swap-tex.
         OR swapped = 1
         IF tex-n = sw-a(pair-i) AND sw-b(pair-i) > 0
             MOVE sw-b(pair-i) TO tex-n
+            MOVE sw-nb(pair-i) TO name-b
             MOVE 1 TO swapped
         ELSE
             IF tex-n = sw-b(pair-i) AND sw-a(pair-i) > 0
                 MOVE sw-a(pair-i) TO tex-n
+                MOVE sw-na(pair-i) TO name-b
                 MOVE 1 TO swapped
             END-IF
         END-IF
@@ -1093,36 +1284,170 @@ load-switches.
     MOVE 0 TO n-sw
     MOVE "SWITCHES" TO lname
     CALL "wad-find" USING lname lump-n
-    IF lump-n < 0
-        EXIT PARAGRAPH
-    END-IF
-    MOVE 8192 TO sw-cap
-    CALL "wad-read-num" USING lump-n sw-buf sw-cap sw-len
-    IF sw-len < 20
-        EXIT PARAGRAPH
-    END-IF
-    MOVE 0 TO sw-at
-    PERFORM UNTIL sw-at + 20 > sw-len OR n-sw >= 64
-        CALL "byte_at" USING BY REFERENCE sw-buf BY VALUE sw-at
-            RETURNING byte-n
-        IF byte-n = 0
-            EXIT PERFORM
+    IF lump-n >= 0
+        MOVE 8192 TO sw-cap
+        CALL "wad-read-num" USING lump-n sw-buf sw-cap sw-len
+        IF sw-len >= 20
+            MOVE 0 TO sw-at
+            PERFORM UNTIL sw-at + 20 > sw-len OR n-sw >= 64
+                CALL "byte_at" USING BY REFERENCE sw-buf BY VALUE sw-at
+                    RETURNING byte-n
+                IF byte-n = 0
+                    EXIT PERFORM
+                END-IF
+                COMPUTE name-at = sw-at + 1
+                MOVE sw-buf(name-at:8) TO name-a
+                COMPUTE name-at = sw-at + 10
+                MOVE sw-buf(name-at:8) TO name-b
+                INSPECT name-a REPLACING ALL X"00" BY " "
+                INSPECT name-b REPLACING ALL X"00" BY " "
+                PERFORM keep-pair
+                ADD 20 TO sw-at
+            END-PERFORM
         END-IF
-        COMPUTE name-at = sw-at + 1
-        MOVE sw-buf(name-at:8) TO name-a
-        COMPUTE name-at = sw-at + 10
-        MOVE sw-buf(name-at:8) TO name-b
-        INSPECT name-a REPLACING ALL X"00" BY " "
-        INSPECT name-b REPLACING ALL X"00" BY " "
-        CALL "tex-num" USING name-a id-a
-        CALL "tex-num" USING name-b id-b
-        IF id-a > 0 AND id-b > 0
-            ADD 1 TO n-sw
-            MOVE id-a TO sw-a(n-sw)
-            MOVE id-b TO sw-b(n-sw)
-        END-IF
-        ADD 20 TO sw-at
-    END-PERFORM
+    END-IF
+    IF n-sw = 0
+        PERFORM load-builtin
+    END-IF
+    .
+
+keep-pair.
+    INSPECT name-a CONVERTING
+        "abcdefghijklmnopqrstuvwxyz" TO "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    INSPECT name-b CONVERTING
+        "abcdefghijklmnopqrstuvwxyz" TO "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    CALL "tex-num" USING name-a id-a
+    CALL "tex-num" USING name-b id-b
+    IF id-a > 0 AND id-b > 0 AND n-sw < 64
+        ADD 1 TO n-sw
+        MOVE id-a TO sw-a(n-sw)
+        MOVE id-b TO sw-b(n-sw)
+        MOVE name-a TO sw-na(n-sw)
+        MOVE name-b TO sw-nb(n-sw)
+    END-IF
+    .
+
+load-builtin.
+    MOVE "SW1BRCOM" TO name-a
+    MOVE "SW2BRCOM" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BRN1" TO name-a
+    MOVE "SW2BRN1" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BRN2" TO name-a
+    MOVE "SW2BRN2" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BRNGN" TO name-a
+    MOVE "SW2BRNGN" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BROWN" TO name-a
+    MOVE "SW2BROWN" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1COMM" TO name-a
+    MOVE "SW2COMM" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1COMP" TO name-a
+    MOVE "SW2COMP" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1DIRT" TO name-a
+    MOVE "SW2DIRT" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1EXIT" TO name-a
+    MOVE "SW2EXIT" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1GRAY" TO name-a
+    MOVE "SW2GRAY" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1GRAY1" TO name-a
+    MOVE "SW2GRAY1" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1METAL" TO name-a
+    MOVE "SW2METAL" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1PIPE" TO name-a
+    MOVE "SW2PIPE" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1SLAD" TO name-a
+    MOVE "SW2SLAD" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STARG" TO name-a
+    MOVE "SW2STARG" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STON1" TO name-a
+    MOVE "SW2STON1" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STON2" TO name-a
+    MOVE "SW2STON2" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STONE" TO name-a
+    MOVE "SW2STONE" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STRTN" TO name-a
+    MOVE "SW2STRTN" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BLUE" TO name-a
+    MOVE "SW2BLUE" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1CMT" TO name-a
+    MOVE "SW2CMT" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1GARG" TO name-a
+    MOVE "SW2GARG" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1GSTON" TO name-a
+    MOVE "SW2GSTON" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1HOT" TO name-a
+    MOVE "SW2HOT" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1LION" TO name-a
+    MOVE "SW2LION" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1SATYR" TO name-a
+    MOVE "SW2SATYR" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1SKIN" TO name-a
+    MOVE "SW2SKIN" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1VINE" TO name-a
+    MOVE "SW2VINE" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1WOOD" TO name-a
+    MOVE "SW2WOOD" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1PANEL" TO name-a
+    MOVE "SW2PANEL" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1ROCK" TO name-a
+    MOVE "SW2ROCK" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1MET2" TO name-a
+    MOVE "SW2MET2" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1WDMET" TO name-a
+    MOVE "SW2WDMET" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1BRIK" TO name-a
+    MOVE "SW2BRIK" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1MOD1" TO name-a
+    MOVE "SW2MOD1" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1ZIM" TO name-a
+    MOVE "SW2ZIM" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1STON6" TO name-a
+    MOVE "SW2STON6" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1TEK" TO name-a
+    MOVE "SW2TEK" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1MARB" TO name-a
+    MOVE "SW2MARB" TO name-b
+    PERFORM keep-pair
+    MOVE "SW1SKULL" TO name-a
+    MOVE "SW2SKULL" TO name-b
+    PERFORM keep-pair
     .
 
 drop-door.
@@ -1207,8 +1532,10 @@ trace-side.
     END-IF
     CALL "sub_i32" USING BY VALUE dx BY VALUE ox RETURNING dx
     CALL "sub_i32" USING BY VALUE dy BY VALUE oy RETURNING dy
-    CALL "fixed_mul" USING BY VALUE tdy BY VALUE dx RETURNING left-v
-    CALL "fixed_mul" USING BY VALUE dy BY VALUE tdx RETURNING right-v
+    CALL "shar32" USING BY VALUE tdy BY VALUE 8 RETURNING sh1
+    CALL "fixed_mul" USING BY VALUE sh1 BY VALUE dx RETURNING left-v
+    CALL "shar32" USING BY VALUE tdx BY VALUE 8 RETURNING sh2
+    CALL "fixed_mul" USING BY VALUE dy BY VALUE sh2 RETURNING right-v
     IF right-v < left-v
         MOVE 0 TO side-bit
     ELSE
@@ -1251,8 +1578,10 @@ point-side.
     END-IF
     CALL "sub_i32" USING BY VALUE dx BY VALUE vtx-x(v1-slot) RETURNING dx
     CALL "sub_i32" USING BY VALUE dy BY VALUE vtx-y(v1-slot) RETURNING dy
-    CALL "fixed_mul" USING BY VALUE ldy BY VALUE dx RETURNING left-v
-    CALL "fixed_mul" USING BY VALUE dy BY VALUE ldx RETURNING right-v
+    CALL "shar32" USING BY VALUE ldy BY VALUE 8 RETURNING sh1
+    CALL "fixed_mul" USING BY VALUE sh1 BY VALUE dx RETURNING left-v
+    CALL "shar32" USING BY VALUE ldx BY VALUE 8 RETURNING sh2
+    CALL "fixed_mul" USING BY VALUE dy BY VALUE sh2 RETURNING right-v
     IF right-v < left-v
         MOVE 0 TO side-bit
     ELSE

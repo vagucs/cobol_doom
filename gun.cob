@@ -287,7 +287,7 @@ tick-gun.
         ADD 1 TO gun-step
         PERFORM enter-step
         IF gun-mode = 0 AND fire-held = 1 AND ply-on = 1
-            AND ply-weap NOT = 5 AND ply-weap NOT = 7
+            AND ply-weap NOT = 7
             PERFORM can-fire
             IF can-n = 1
                 MOVE 1 TO gun-mode
@@ -307,7 +307,7 @@ tick-gun.
     PERFORM can-fire
     IF fire-held = 1 AND can-n = 1 AND ply-on = 1
         MOVE 1 TO go-n
-        IF gun-down = 1 AND (ply-weap = 5 OR ply-weap = 7)
+        IF gun-down = 1 AND ply-weap = 7
             MOVE 0 TO go-n
         END-IF
         IF go-n = 1
@@ -734,8 +734,12 @@ step-saw.
 
 step-rocket.
     IF gun-step >= 2
-        PERFORM go-ready
-        EXIT PARAGRAPH
+        IF fire-held = 1 AND ply-misl >= 1
+            MOVE 0 TO gun-step
+        ELSE
+            PERFORM go-ready
+            EXIT PARAGRAPH
+        END-IF
     END-IF
     IF gun-step = 0
         MOVE "MISGB0" TO gun-body
