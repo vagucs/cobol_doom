@@ -640,6 +640,8 @@ PROGRAM-ID. map-draw.
 DATA DIVISION.
 WORKING-STORAGE SECTION.
 COPY "mapstate.cpy".
+COPY "playstate.cpy".
+COPY "sprstate.cpy".
 01 i BINARY-LONG.
 01 have-box BINARY-LONG.
 01 raw-n BINARY-LONG.
@@ -668,6 +670,13 @@ COPY "mapstate.cpy".
 01 side-slot BINARY-LONG.
 01 sec-slot BINARY-LONG.
 01 tex-id BINARY-LONG.
+01 fit-h BINARY-LONG.
+01 mapped-n BINARY-LONG.
+01 dont-n BINARY-LONG.
+01 secret-n BINARY-LONG.
+01 deg-n BINARY-LONG.
+01 front-s BINARY-LONG.
+01 back-s BINARY-LONG.
 
 LINKAGE SECTION.
 01 fb PIC X(64000).
@@ -680,8 +689,7 @@ PROCEDURE DIVISION USING fb pal ink.
     IF n-vertex < 1 OR n-line < 1
         GOBACK
     END-IF
-    CALL "pick_map_colors" USING BY REFERENCE pal
-        BY REFERENCE wall-c BY REFERENCE open-c BY REFERENCE arrow-c
+    MOVE pal(1:1) TO pal(1:1)
     MOVE 0 TO have-box
     PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-vertex
         MOVE vtx-x(i) TO raw-n
@@ -709,71 +717,103 @@ PROCEDURE DIVISION USING fb pal ink.
             END-IF
         END-IF
     END-PERFORM
+    MOVE 200 TO fit-h
+    IF ply-blocks < 11
+        MOVE 168 TO fit-h
+    END-IF
     CALL "map_fit" USING BY VALUE min-x BY VALUE max-x
-        BY VALUE min-y BY VALUE max-y
+        BY VALUE min-y BY VALUE max-y BY VALUE fit-h
     PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-line
-        MOVE vtx-x(ln-v1(i)) TO raw-n
-        CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING x0
-        MOVE vtx-y(ln-v1(i)) TO raw-n
-        CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING y0
-        MOVE vtx-x(ln-v2(i)) TO raw-n
-        CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING x1
-        MOVE vtx-y(ln-v2(i)) TO raw-n
-        CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING y1
-        CALL "map_to" USING BY VALUE x0 BY VALUE y0
-            BY REFERENCE sx0 BY REFERENCE sy0
-        CALL "map_to" USING BY VALUE x1 BY VALUE y1
-            BY REFERENCE sx1 BY REFERENCE sy1
-        MOVE 0 TO pix-c
-        MOVE 0 TO tex-id
-        IF ln-s0(i) >= 0
-            COMPUTE side-slot = ln-s0(i) + 1
-            MOVE sd-mid(side-slot) TO tex-id
-            IF tex-id <= 0
-                MOVE sd-top(side-slot) TO tex-id
-            END-IF
-            IF tex-id <= 0
-                MOVE sd-bot(side-slot) TO tex-id
-            END-IF
-            IF tex-id > 0
-                CALL "tex-swatch" USING tex-id pix-c
+        PERFORM paint-line
+    END-PERFORM
+    IF ply-iddt >= 2
+        PERFORM paint-things
+    END-IF
+    CALL "shar32" USING BY VALUE ply-x BY VALUE 16 RETURNING mx
+    CALL "shar32" USING BY VALUE ply-y BY VALUE 16 RETURNING my
+    CALL "map_to" USING BY VALUE mx BY VALUE my
+        BY REFERENCE sx0 BY REFERENCE sy0
+    CALL "deg_from_ang" USING BY VALUE ply-ang RETURNING deg-n
+    CALL "map_arrow" USING BY VALUE mx BY VALUE my
+        BY VALUE deg-n BY REFERENCE sx1 BY REFERENCE sy1
+    MOVE 209 TO pix-c
+    CALL "v-draw-line" USING fb sx0 sy0 sx1 sy1 pix-c ink
+    GOBACK.
+
+paint-line.
+    CALL "bit_and" USING BY VALUE ln-flags(i) BY VALUE 128
+        RETURNING dont-n
+    CALL "bit_and" USING BY VALUE ln-flags(i) BY VALUE 256
+        RETURNING mapped-n
+    CALL "bit_and" USING BY VALUE ln-flags(i) BY VALUE 32
+        RETURNING secret-n
+    MOVE vtx-x(ln-v1(i)) TO raw-n
+    CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING x0
+    MOVE vtx-y(ln-v1(i)) TO raw-n
+    CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING y0
+    MOVE vtx-x(ln-v2(i)) TO raw-n
+    CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING x1
+    MOVE vtx-y(ln-v2(i)) TO raw-n
+    CALL "shar32" USING BY VALUE raw-n BY VALUE 16 RETURNING y1
+    CALL "map_to" USING BY VALUE x0 BY VALUE y0
+        BY REFERENCE sx0 BY REFERENCE sy0
+    CALL "map_to" USING BY VALUE x1 BY VALUE y1
+        BY REFERENCE sx1 BY REFERENCE sy1
+    IF ply-iddt = 0 AND mapped-n = 0
+        IF ply-amap = 1 AND dont-n = 0
+            MOVE 99 TO pix-c
+            CALL "v-draw-line" USING fb sx0 sy0 sx1 sy1 pix-c ink
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF ply-iddt = 0 AND dont-n NOT = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO pix-c
+    IF ln-back(i) < 0
+        MOVE 176 TO pix-c
+    ELSE
+        COMPUTE front-s = ln-front(i) + 1
+        COMPUTE back-s = ln-back(i) + 1
+        IF secret-n NOT = 0
+            MOVE 176 TO pix-c
+        ELSE
+            IF front-s >= 1 AND back-s >= 1
+                AND front-s <= n-sector AND back-s <= n-sector
+                AND sec-floor-h(front-s) NOT = sec-floor-h(back-s)
+                MOVE 64 TO pix-c
             ELSE
-                IF ln-front(i) >= 0
-                    COMPUTE sec-slot = ln-front(i) + 1
-                    CALL "flat-swatch" USING sec-floor-pic(sec-slot) pix-c
+                IF front-s >= 1 AND back-s >= 1
+                    AND front-s <= n-sector AND back-s <= n-sector
+                    AND sec-ceil-h(front-s) NOT = sec-ceil-h(back-s)
+                    MOVE 231 TO pix-c
+                ELSE
+                    IF ply-iddt > 0
+                        MOVE 96 TO pix-c
+                    END-IF
                 END-IF
             END-IF
         END-IF
-        IF pix-c = 0
-            IF ln-back(i) < 0
-                MOVE wall-c TO pix-c
-            ELSE
-                MOVE open-c TO pix-c
-            END-IF
-        END-IF
+    END-IF
+    IF pix-c NOT = 0
         CALL "v-draw-line" USING fb sx0 sy0 sx1 sy1 pix-c ink
-    END-PERFORM
-    MOVE 0 TO found-p
-    PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-thing OR found-p = 1
-        IF th-kind(i) = 1
-            MOVE i TO p-slot
-            MOVE 1 TO found-p
+    END-IF
+    .
+
+paint-things.
+    PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-mobj
+        IF mo-name(i) NOT = SPACES AND mo-hp(i) > 0
+            CALL "shar32" USING BY VALUE mo-x(i) BY VALUE 16 RETURNING mx
+            CALL "shar32" USING BY VALUE mo-y(i) BY VALUE 16 RETURNING my
+            CALL "map_to" USING BY VALUE mx BY VALUE my
+                BY REFERENCE sx0 BY REFERENCE sy0
+            MOVE sx0 TO sx1
+            MOVE sy0 TO sy1
+            ADD 3 TO sx1
+            MOVE 112 TO pix-c
+            CALL "v-draw-line" USING fb sx0 sy0 sx1 sy1 pix-c ink
         END-IF
     END-PERFORM
-    IF found-p = 0 AND n-thing > 0
-        MOVE 1 TO p-slot
-        MOVE 1 TO found-p
-    END-IF
-    IF found-p = 1
-        CALL "map_to" USING BY VALUE th-x(p-slot) BY VALUE th-y(p-slot)
-            BY REFERENCE sx0 BY REFERENCE sy0
-        CALL "map_arrow" USING BY VALUE th-x(p-slot) BY VALUE th-y(p-slot)
-            BY VALUE th-ang(p-slot) BY REFERENCE sx1 BY REFERENCE sy1
-        CALL "v-draw-line" USING fb sx0 sy0 sx1 sy1 arrow-c ink
-        MOVE sx0 TO sx-dot
-        MOVE sy0 TO sy-dot
-        CALL "v-draw-line" USING fb sx-dot sy-dot sx0 sy0 arrow-c ink
-    END-IF
-    GOBACK.
+    .
 
 END PROGRAM map-draw.

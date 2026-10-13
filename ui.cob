@@ -47,6 +47,18 @@ COPY "mapstate.cpy".
 01 left-n BINARY-LONG.
 01 bot-n BINARY-LONG.
 01 dig-c PIC X.
+01 slot-i BINARY-LONG.
+01 peek-cmd BINARY-LONG VALUE 3.
+01 peek-rc BINARY-LONG.
+01 dummy-map PIC X(8).
+01 desc-txt PIC X(24).
+01 txt-n BINARY-LONG.
+01 ch-i BINARY-LONG.
+01 ch-c PIC X.
+01 code-n BINARY-LONG.
+01 code-pic PIC 999.
+01 hold-x BINARY-LONG.
+01 border-i BINARY-LONG.
 01 xs PIC X(81) VALUE
     "185148069209116166071135071254097188128214133208148235156048174265130279198140281".
 01 ys PIC X(81) VALUE
@@ -74,6 +86,18 @@ PROCEDURE DIVISION USING fb mode-n pick-n skull-n
         IF mode-n = 2
             PERFORM draw-options
         END-IF
+        IF mode-n = 7
+            PERFORM draw-episode
+        END-IF
+        IF mode-n = 8
+            PERFORM draw-skill
+        END-IF
+        IF mode-n = 9
+            PERFORM draw-load
+        END-IF
+        IF mode-n = 10
+            PERFORM draw-save
+        END-IF
     END-IF
     GOBACK.
 
@@ -97,8 +121,14 @@ draw-menu.
     MOVE "M_OPTION" TO lname
     MOVE 80 TO pen-y
     PERFORM draw-named
-    MOVE "M_QUITG" TO lname
+    MOVE "M_LOADG" TO lname
     MOVE 96 TO pen-y
+    PERFORM draw-named
+    MOVE "M_SAVEG" TO lname
+    MOVE 112 TO pen-y
+    PERFORM draw-named
+    MOVE "M_QUITG" TO lname
+    MOVE 128 TO pen-y
     PERFORM draw-named
     IF skull-n = 0
         MOVE "M_SKULL1" TO lname
@@ -151,6 +181,145 @@ draw-options.
         MOVE 112 TO pen-y
     END-IF
     PERFORM draw-named
+    .
+
+draw-episode.
+    MOVE "M_EPISOD" TO lname
+    MOVE 54 TO pen-x
+    MOVE 38 TO pen-y
+    PERFORM draw-named
+    MOVE "M_EPI1" TO lname
+    MOVE 48 TO pen-x
+    MOVE 63 TO pen-y
+    PERFORM draw-named
+    MOVE "M_EPI2" TO lname
+    MOVE 79 TO pen-y
+    PERFORM draw-named
+    MOVE "M_EPI3" TO lname
+    MOVE 95 TO pen-y
+    PERFORM draw-named
+    MOVE "M_EPI4" TO lname
+    MOVE 111 TO pen-y
+    PERFORM draw-named
+    PERFORM menu-skull
+    MOVE 20 TO pen-x
+    COMPUTE pen-y = 58 + pick-n * 16
+    PERFORM draw-named
+    .
+
+draw-skill.
+    MOVE "M_NEWG" TO lname
+    MOVE 96 TO pen-x
+    MOVE 14 TO pen-y
+    PERFORM draw-named
+    MOVE "M_SKILL" TO lname
+    MOVE 54 TO pen-x
+    MOVE 38 TO pen-y
+    PERFORM draw-named
+    MOVE "M_JKILL" TO lname
+    MOVE 48 TO pen-x
+    MOVE 63 TO pen-y
+    PERFORM draw-named
+    MOVE "M_ROUGH" TO lname
+    MOVE 79 TO pen-y
+    PERFORM draw-named
+    MOVE "M_HURT" TO lname
+    MOVE 95 TO pen-y
+    PERFORM draw-named
+    MOVE "M_ULTRA" TO lname
+    MOVE 111 TO pen-y
+    PERFORM draw-named
+    MOVE "M_NMARE" TO lname
+    MOVE 127 TO pen-y
+    PERFORM draw-named
+    PERFORM menu-skull
+    MOVE 20 TO pen-x
+    COMPUTE pen-y = 58 + pick-n * 16
+    PERFORM draw-named
+    .
+
+draw-load.
+    MOVE "M_LOADG" TO lname
+    MOVE 72 TO pen-x
+    MOVE 28 TO pen-y
+    PERFORM draw-named
+    PERFORM draw-slots
+    .
+
+draw-save.
+    MOVE "M_SAVEG" TO lname
+    MOVE 72 TO pen-x
+    MOVE 28 TO pen-y
+    PERFORM draw-named
+    PERFORM draw-slots
+    .
+
+draw-slots.
+    PERFORM VARYING slot-i FROM 0 BY 1 UNTIL slot-i > 5
+        CALL "slot-act" USING peek-cmd slot-i peek-rc
+            dummy-map desc-txt
+        IF peek-rc NOT = 0
+            MOVE "empty slot" TO desc-txt
+        END-IF
+        COMPUTE pen-y = 54 + slot-i * 16
+        MOVE 80 TO pen-x
+        PERFORM draw-border
+        MOVE 80 TO pen-x
+        PERFORM draw-text
+    END-PERFORM
+    PERFORM menu-skull
+    MOVE 48 TO pen-x
+    COMPUTE pen-y = 49 + pick-n * 16
+    PERFORM draw-named
+    .
+
+draw-border.
+    MOVE pen-x TO hold-x
+    MOVE "M_LSLEFT" TO lname
+    SUBTRACT 8 FROM pen-x
+    ADD 7 TO pen-y
+    PERFORM draw-named
+    ADD 8 TO pen-x
+    PERFORM 24 TIMES
+        MOVE "M_LSCNTR" TO lname
+        PERFORM draw-named
+        ADD 8 TO pen-x
+    END-PERFORM
+    MOVE "M_LSRGHT" TO lname
+    PERFORM draw-named
+    MOVE hold-x TO pen-x
+    SUBTRACT 7 FROM pen-y
+    .
+
+draw-text.
+    MOVE FUNCTION LENGTH(FUNCTION TRIM(desc-txt)) TO txt-n
+    IF txt-n < 1
+        EXIT PARAGRAPH
+    END-IF
+    IF txt-n > 24
+        MOVE 24 TO txt-n
+    END-IF
+    PERFORM VARYING ch-i FROM 1 BY 1 UNTIL ch-i > txt-n
+        MOVE desc-txt(ch-i:1) TO ch-c
+        IF ch-c = " "
+            ADD 4 TO pen-x
+        ELSE
+            COMPUTE code-n = FUNCTION ORD(ch-c) - 1
+            MOVE "STCFN000" TO lname
+            MOVE code-n TO code-pic
+            MOVE code-pic TO lname(6:3)
+            PERFORM draw-named
+            ADD 8 TO pen-x
+        END-IF
+    END-PERFORM
+    .
+
+menu-skull.
+    IF skull-n = 0
+        MOVE "M_SKULL1" TO lname
+    ELSE
+        MOVE "M_SKULL2" TO lname
+    END-IF
     .
 
 draw-resol.

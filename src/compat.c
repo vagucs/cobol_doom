@@ -187,6 +187,11 @@ int angle_from_deg(int deg)
     return (int)((int64_t)deg * 536870912LL / 45);
 }
 
+int deg_from_ang(int ang)
+{
+    return (int)((int64_t)ang * 45 / 536870912LL);
+}
+
 int point_side(int nodex, int nodey, int nodedx, int nodedy, int x, int y)
 {
     int dx;

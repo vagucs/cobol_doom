@@ -79,3 +79,6 @@
    05 ply-invis BINARY-LONG VALUE 0.
    05 ply-str BINARY-LONG VALUE 0.
    05 ply-amap BINARY-LONG VALUE 0.
+   05 ply-skill BINARY-LONG VALUE 2.
+   05 ply-iddt BINARY-LONG VALUE 0.
+   05 ply-mapon BINARY-LONG VALUE 0.

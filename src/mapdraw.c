@@ -19,11 +19,12 @@ static double mv_scale;
 static double mv_ox;
 static double mv_oy;
 
-void map_fit(int minx, int maxx, int miny, int maxy)
+void map_fit(int minx, int maxx, int miny, int maxy, int viewh)
 {
     double spanx;
     double spany;
     double sy;
+    double vh;
 
     spanx = (double)maxx - (double)minx;
     spany = (double)maxy - (double)miny;
@@ -31,14 +32,52 @@ void map_fit(int minx, int maxx, int miny, int maxy)
         spanx = 1.0;
     if (spany < 1.0)
         spany = 1.0;
+    vh = (double)viewh;
+    if (vh < 32.0)
+        vh = 168.0;
     mv_scale = (320.0 - 16.0) / spanx;
-    sy = (200.0 - 16.0) / spany;
+    sy = (vh - 16.0) / spany;
     if (sy < mv_scale)
         mv_scale = sy;
     mv_minx = (double)minx;
     mv_maxy = (double)maxy;
     mv_ox = (320.0 - spanx * mv_scale) / 2.0;
-    mv_oy = (200.0 - spany * mv_scale) / 2.0;
+    mv_oy = (vh - spany * mv_scale) / 2.0;
+}
+
+void patch_column(unsigned char *fb, int x, unsigned char *patch,
+    int plen, int column)
+{
+    int offset_pos;
+    int offset;
+    int top;
+    int length;
+    int source;
+    int i;
+    int y;
+
+    if (fb == 0 || patch == 0 || x < 0 || x >= 320 || column < 0)
+        return;
+    offset_pos = 8 + column * 4;
+    if (offset_pos + 4 > plen)
+        return;
+    offset = (int)patch[offset_pos]
+        | ((int)patch[offset_pos + 1] << 8)
+        | ((int)patch[offset_pos + 2] << 16)
+        | ((int)patch[offset_pos + 3] << 24);
+    while (offset >= 0 && offset + 1 < plen && patch[offset] != 255) {
+        top = patch[offset];
+        length = patch[offset + 1];
+        source = offset + 3;
+        for (i = 0; i < length; i++) {
+            y = top + i;
+            if (y >= 200)
+                break;
+            if (source + i < plen)
+                fb[y * 320 + x] = patch[source + i];
+        }
+        offset += length + 4;
+    }
 }
 
 void map_to(int x, int y, int *sx, int *sy)

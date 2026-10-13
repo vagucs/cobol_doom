@@ -103,6 +103,12 @@ COPY "sprstate.cpy".
 01 skull-wait BINARY-LONG VALUE 8.
 01 live-n BINARY-LONG VALUE 0.
 01 boot-map PIC X(8).
+01 pack-n BINARY-LONG VALUE 0.
+01 max-pick BINARY-LONG VALUE 0.
+01 save-cmd BINARY-LONG.
+01 save-rc BINARY-LONG.
+01 save-map PIC X(8).
+01 save-desc PIC X(24).
 01 show-k BINARY-LONG VALUE 0.
 01 show-i BINARY-LONG VALUE 0.
 01 show-s BINARY-LONG VALUE 0.
@@ -167,6 +173,9 @@ PROCEDURE DIVISION.
     END-IF
     MOVE 10 TO ply-blocks
     MOVE 2 TO ply-scale
+    MOVE 2 TO ply-skill
+    MOVE 0 TO ply-iddt
+    MOVE 0 TO ply-mapon
     CALL "view-frame" USING fb ink
     IF ink < 1000
         DISPLAY "vista vazia " ink
@@ -182,6 +191,13 @@ PROCEDURE DIVISION.
     CALL "audio_init" RETURNING rc
     CALL "mus-title"
     MOVE map-name TO boot-map
+    MOVE "MAP01" TO want-map
+    CALL "wad-find" USING want-map lump-n
+    IF lump-n >= 0
+        MOVE 1 TO pack-n
+    ELSE
+        MOVE 0 TO pack-n
+    END-IF
     MOVE 0 TO mode-n
     MOVE 0 TO pick-n
     MOVE 0 TO live-n
@@ -229,6 +245,15 @@ PROCEDURE DIVISION.
                 PERFORM front-keys
                 PERFORM front-clock
             ELSE
+            IF pressed = 9
+                IF ply-mapon = 0
+                    MOVE 1 TO ply-mapon
+                ELSE
+                    MOVE 0 TO ply-mapon
+                END-IF
+                PERFORM paint-view
+                MOVE 0 TO pressed
+            END-IF
             PERFORM size-key
             PERFORM read-keys
             MOVE pressed TO typed-n
@@ -294,7 +319,8 @@ PROCEDURE DIVISION.
                             END-IF
                             MOVE 1 TO draw-now
                         END-IF
-                        IF moving = 1 OR air-n = 1
+                        IF ply-exit = 0
+                            AND (moving = 1 OR air-n = 1)
                             CALL "walk-tic" USING k-up k-down k-left
                                 k-right k-shift k-alt k-comma k-dot
                             MOVE 1 TO draw-now
@@ -340,17 +366,18 @@ PROCEDURE DIVISION.
                             EXIT PERFORM
                         END-IF
                     END-PERFORM
+                    IF pressed = 9
+                        MOVE 1 TO draw-now
+                    END-IF
                     IF draw-now = 1 AND ply-exit NOT = 1
-                        CALL "view-frame" USING fb ink
-                        PERFORM paint-screen
+                        PERFORM paint-view
                     END-IF
                     IF ply-exit = 1
                         PERFORM begin-tally
                     END-IF
                 ELSE
                     IF cheat-drew = 1 AND ply-exit NOT = 1
-                        CALL "view-frame" USING fb ink
-                        PERFORM paint-screen
+                        PERFORM paint-view
                     END-IF
                 END-IF
             END-IF
@@ -466,8 +493,7 @@ size-key.
         END-IF
     END-IF
     IF ply-blocks NOT = size-was
-        CALL "view-frame" USING fb ink
-        PERFORM paint-screen
+        PERFORM paint-view
     END-IF
     .
 
@@ -495,10 +521,8 @@ front-keys.
         END-IF
     END-IF
     IF pressed = 1073741905
-        IF mode-n = 1 AND pick-n < 2
-            ADD 1 TO pick-n
-        END-IF
-        IF mode-n = 2 AND pick-n < 2
+        PERFORM menu-max
+        IF pick-n < max-pick
             ADD 1 TO pick-n
         END-IF
     END-IF
@@ -515,13 +539,14 @@ front-keys.
         END-IF
     END-IF
     IF pressed = 27
-        IF mode-n = 2
+        IF mode-n = 2 OR mode-n = 7 OR mode-n = 8
+            OR mode-n = 9 OR mode-n = 10
             MOVE 1 TO mode-n
+            MOVE 0 TO pick-n
         ELSE
             IF live-n = 1
                 MOVE 3 TO mode-n
-                CALL "view-frame" USING fb ink
-                PERFORM paint-screen
+                PERFORM paint-view
                 EXIT PARAGRAPH
             ELSE
                 MOVE 0 TO mode-n
@@ -554,7 +579,13 @@ opt-right.
 
 opt-enter.
     IF mode-n = 1 AND pick-n = 0
-        PERFORM fresh-game
+        IF pack-n = 1
+            MOVE 8 TO mode-n
+            MOVE 2 TO pick-n
+        ELSE
+            MOVE 7 TO mode-n
+            MOVE 0 TO pick-n
+        END-IF
         EXIT PARAGRAPH
     END-IF
     IF mode-n = 1 AND pick-n = 1
@@ -563,13 +594,141 @@ opt-enter.
         EXIT PARAGRAPH
     END-IF
     IF mode-n = 1 AND pick-n = 2
+        MOVE 9 TO mode-n
+        MOVE 0 TO pick-n
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 1 AND pick-n = 3
+        IF live-n = 0
+            MOVE "oof" TO snd-name
+            CALL "sfx-play" USING snd-name
+        ELSE
+            MOVE 10 TO mode-n
+            MOVE 0 TO pick-n
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 1 AND pick-n = 4
         MOVE -1 TO pressed
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 7
+        PERFORM begin-episode
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 8
+        PERFORM begin-skill
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 9
+        PERFORM load-picked
+        EXIT PARAGRAPH
+    END-IF
+    IF mode-n = 10
+        PERFORM save-picked
+        EXIT PARAGRAPH
     END-IF
     IF mode-n = 2 AND pick-n = 0
         MOVE 0 TO mode-n
         MOVE 0 TO live-n
         MOVE 0 TO pick-n
         CALL "mus-title"
+    END-IF
+    .
+
+menu-max.
+    MOVE 0 TO max-pick
+    IF mode-n = 1
+        MOVE 4 TO max-pick
+    END-IF
+    IF mode-n = 2
+        MOVE 2 TO max-pick
+    END-IF
+    IF mode-n = 7
+        MOVE 3 TO max-pick
+    END-IF
+    IF mode-n = 8
+        MOVE 4 TO max-pick
+    END-IF
+    IF mode-n = 9 OR mode-n = 10
+        MOVE 5 TO max-pick
+    END-IF
+    .
+
+begin-episode.
+    IF pick-n > 0
+        MOVE "E2M1" TO want-map
+        CALL "wad-find" USING want-map lump-n
+        IF lump-n < 0
+            MOVE "REGISTERED VERSION ONLY" TO ply-msg
+            MOVE 140 TO ply-msgn
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    MOVE "E1M1" TO map-name
+    IF pick-n = 1
+        MOVE "2" TO map-name(2:1)
+    END-IF
+    IF pick-n = 2
+        MOVE "3" TO map-name(2:1)
+    END-IF
+    IF pick-n = 3
+        MOVE "4" TO map-name(2:1)
+    END-IF
+    MOVE 8 TO mode-n
+    MOVE 2 TO pick-n
+    .
+
+begin-skill.
+    MOVE pick-n TO ply-skill
+    IF pack-n = 1
+        MOVE "MAP01" TO map-name
+    END-IF
+    PERFORM start-picked
+    .
+
+load-picked.
+    MOVE 2 TO save-cmd
+    CALL "slot-act" USING save-cmd pick-n save-rc save-map save-desc
+    IF save-rc = 0
+        MOVE save-map TO map-name
+        MOVE 0 TO ply-mapon
+        MOVE 0 TO ply-iddt
+        CALL "view-frame" USING fb ink
+        CALL "mus-level" USING map-name
+        MOVE 2 TO wipe-cmd
+        CALL "ui-wipe" USING fb wipe-cmd wipe-done
+        MOVE 1 TO live-n
+        MOVE 3 TO go-mode
+        MOVE 5 TO mode-n
+    ELSE
+        MOVE "empty slot" TO ply-msg
+        MOVE 140 TO ply-msgn
+    END-IF
+    .
+
+save-picked.
+    MOVE 1 TO save-cmd
+    CALL "slot-act" USING save-cmd pick-n save-rc save-map save-desc
+    IF save-rc = 0
+        MOVE "GAME SAVED" TO ply-msg
+        MOVE 140 TO ply-msgn
+        MOVE 3 TO mode-n
+        PERFORM paint-view
+    ELSE
+        MOVE "oof" TO snd-name
+        CALL "sfx-play" USING snd-name
+    END-IF
+    .
+
+paint-view.
+    IF ply-mapon = 1
+        CALL "map-draw" USING fb pal ink
+        CALL "status-draw" USING fb
+        PERFORM paint-screen
+    ELSE
+        CALL "view-frame" USING fb ink
+        PERFORM paint-screen
     END-IF
     .
 
@@ -584,7 +743,8 @@ front-clock.
         EXIT PARAGRAPH
     END-IF
     MOVE now-ms TO last-ms
-    IF mode-n = 1 OR mode-n = 2
+    IF mode-n = 1 OR mode-n = 2 OR mode-n = 7
+        OR mode-n = 8 OR mode-n = 9 OR mode-n = 10
         OR (mode-n = 4 AND ply-loc = 1)
         SUBTRACT 1 FROM skull-wait
         IF skull-wait <= 0
@@ -680,9 +840,16 @@ begin-tally.
     MOVE 0 TO show-i
     MOVE 0 TO show-s
     MOVE 0 TO show-t
+    MOVE 1 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
     MOVE 4 TO mode-n
     CALL "mus-inter"
-    PERFORM draw-front
+    CALL "ui-draw" USING fb mode-n pick-n skull-n
+        show-k show-i show-s show-t
+    MOVE 2 TO wipe-cmd
+    CALL "ui-wipe" USING fb wipe-cmd wipe-done
+    MOVE 4 TO go-mode
+    MOVE 5 TO mode-n
     .
 
 story-gate.
@@ -730,10 +897,16 @@ finish-tally.
     .
 
 fresh-game.
+    MOVE boot-map TO map-name
+    PERFORM start-picked
+    .
+
+start-picked.
     MOVE 1 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
-    MOVE boot-map TO map-name
     MOVE 0 TO ply-keep
+    MOVE 0 TO ply-mapon
+    MOVE 0 TO ply-iddt
     PERFORM load-level
     MOVE 2 TO wipe-cmd
     CALL "ui-wipe" USING fb wipe-cmd wipe-done
@@ -762,6 +935,8 @@ load-level.
     MOVE 0 TO spr-once
     MOVE 0 TO ply-on
     MOVE 0 TO ply-exit
+    MOVE 0 TO ply-mapon
+    MOVE 0 TO ply-iddt
     MOVE 9 TO act-mode
     CALL "door-act" USING act-mode door-busy door-moved
     CALL "view-frame" USING fb ink
@@ -1034,8 +1209,7 @@ note-fps.
     MOVE 0 TO fps-n
     MOVE now-ms TO fps-ms
     IF mode-n = 3
-        CALL "view-frame" USING fb ink
-        PERFORM paint-screen
+        PERFORM paint-view
     ELSE
         IF mode-n = 0 OR mode-n = 1 OR mode-n = 2
             OR mode-n = 4

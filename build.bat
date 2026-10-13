@@ -12,5 +12,5 @@ if errorlevel 1 (
   exit /b 1
 )
 if not exist build mkdir build
-cobc -x -free -O2 -I. -o build\cobol_doom.exe main.cob wad.cob vvideo.cob rdata.cob map.cob sprites.cob walk.cob door.cob gun.cob enemy.cob status.cob item.cob cheat.cob ui.cob sound.cob finale.cob view.cob src\compat.c src\wadio.c src\mapdraw.c src\audio.c src\video.c -IC:\msys64\ucrt64\include\SDL2 -LC:\msys64\ucrt64\lib -lSDL2 -lwinmm
+cobc -x -free -O2 -I. -o build\cobol_doom.exe main.cob wad.cob vvideo.cob rdata.cob map.cob sprites.cob walk.cob door.cob gun.cob enemy.cob status.cob item.cob cheat.cob ui.cob sound.cob finale.cob save.cob view.cob src\compat.c src\wadio.c src\mapdraw.c src\audio.c src\video.c src\slotio.c -IC:\msys64\ucrt64\include\SDL2 -LC:\msys64\ucrt64\lib -lSDL2 -lwinmm
 exit /b %ERRORLEVEL%

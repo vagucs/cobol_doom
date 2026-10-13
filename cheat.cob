@@ -202,10 +202,11 @@ PROCEDURE DIVISION USING key-n did-out.
     IF fired = 1
         IF ply-amap = 0
             MOVE 1 TO ply-amap
+            MOVE "COMPUTER AREA MAP" TO note-txt
         ELSE
             MOVE 0 TO ply-amap
+            MOVE "MAP OFF" TO note-txt
         END-IF
-        MOVE "NO MAP" TO note-txt
         PERFORM say-msg
     END-IF
     MOVE n-behl TO seq-at
@@ -240,7 +241,20 @@ PROCEDURE DIVISION USING key-n did-out.
     PERFORM feed-one
     MOVE seq-at TO n-dt
     IF fired = 1
-        MOVE "NO MAP" TO note-txt
+        ADD 1 TO ply-iddt
+        IF ply-iddt > 2
+            MOVE 0 TO ply-iddt
+        END-IF
+        MOVE 1 TO ply-mapon
+        IF ply-iddt = 1
+            MOVE "MAP ALL" TO note-txt
+        END-IF
+        IF ply-iddt = 2
+            MOVE "MAP THINGS" TO note-txt
+        END-IF
+        IF ply-iddt = 0
+            MOVE "MAP NORMAL" TO note-txt
+        END-IF
         PERFORM say-msg
     END-IF
     MOVE n-pos TO seq-at

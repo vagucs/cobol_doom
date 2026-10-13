@@ -152,10 +152,44 @@ main-enemy.
                 RETURNING bit-n
             IF bit-n NOT = 0
                 PERFORM think-one
+            ELSE
+                PERFORM rise-dead
             END-IF
         END-IF
     END-PERFORM
     GOBACK.
+
+rise-dead.
+    IF ply-skill NOT = 4
+        EXIT PARAGRAPH
+    END-IF
+    IF mo-hp(who-i) > 0 OR mo-kind(who-i) NOT = 3
+        EXIT PARAGRAPH
+    END-IF
+    IF mo-name(who-i) = SPACES OR mo-name(who-i) = "BEXP"
+        OR mo-name(who-i) = "BAR1" OR mo-max(who-i) < 1
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO mo-count(who-i)
+    IF mo-count(who-i) < 420
+        EXIT PARAGRAPH
+    END-IF
+    MOVE mo-max(who-i) TO mo-hp(who-i)
+    MOVE 0 TO mo-frame(who-i)
+    MOVE 0 TO mo-ai(who-i)
+    MOVE 0 TO mo-kind(who-i)
+    MOVE 0 TO mo-seq(who-i)
+    MOVE 0 TO mo-step(who-i)
+    MOVE 0 TO mo-count(who-i)
+    MOVE 8 TO mo-wait(who-i)
+    MOVE 8 TO mo-dir(who-i)
+    MOVE 0 TO mo-mx(who-i)
+    MOVE 0 TO mo-my(who-i)
+    MOVE 4194310 TO mo-flags(who-i)
+    CALL "mul_i32" USING BY VALUE mo-h(who-i) BY VALUE 4
+        RETURNING mo-h(who-i)
+    MOVE 1 TO moved-out
+    .
 
 fill-dirs.
     MOVE 65536 TO xs(1)
@@ -220,6 +254,9 @@ think-one.
     END-IF
     IF cls-n = 0
         EXIT PARAGRAPH
+    END-IF
+    IF ply-skill = 4 AND spd-u > 0
+        COMPUTE spd-u = spd-u * 2
     END-IF
     IF cls-n = 5
         PERFORM skul-one
@@ -649,6 +686,9 @@ hurt-player.
         IF rnd-n < 128
             EXIT PARAGRAPH
         END-IF
+    END-IF
+    IF ply-skill = 0
+        DIVIDE dmg BY 2 GIVING dmg
     END-IF
     SUBTRACT dmg FROM ply-hp
     IF ply-hp < 0

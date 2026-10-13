@@ -244,7 +244,14 @@ PROCEDURE DIVISION.
             OR kind-n = 3 OR kind-n = 4
             CONTINUE
         ELSE
-            CALL "bit_and" USING BY VALUE opt-n BY VALUE 2
+            MOVE 2 TO tmp
+            IF ply-skill <= 1
+                MOVE 1 TO tmp
+            END-IF
+            IF ply-skill >= 3
+                MOVE 4 TO tmp
+            END-IF
+            CALL "bit_and" USING BY VALUE opt-n BY VALUE tmp
                 RETURNING bit-n
             IF bit-n = 0
                 CONTINUE

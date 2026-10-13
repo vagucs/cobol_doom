@@ -1561,6 +1561,7 @@ start-death.
     MOVE tmp TO mo-flags(who-i)
     DIVIDE mo-h(who-i) BY 4 GIVING mo-h(who-i)
     MOVE 0 TO mo-seq(who-i)
+    MOVE 0 TO mo-count(who-i)
     IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
         OR mo-name(who-i) = "SSWV"
         MOVE 1 TO mo-seq(who-i)
@@ -1849,6 +1850,9 @@ rocket-splash.
     IF units-n < 128 AND ply-hp > 0 AND ply-god = 0
         AND ply-inv = 0
         SUBTRACT units-n FROM 128 GIVING dmg
+        IF ply-skill = 0
+            DIVIDE dmg BY 2 GIVING dmg
+        END-IF
         SUBTRACT dmg FROM ply-hp
         IF ply-hp < 0
             MOVE 0 TO ply-hp

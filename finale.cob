@@ -49,6 +49,15 @@ WORKING-STORAGE SECTION.
 01 txt PIC X(900).
 01 fin-pack BINARY-LONG VALUE 0.
 01 fin-map BINARY-LONG VALUE 0.
+01 fin-bun BINARY-LONG VALUE 0.
+01 fin-bstage BINARY-LONG VALUE -1.
+01 scroll-n BINARY-LONG.
+01 src-col BINARY-LONG.
+01 stage-n BINARY-LONG.
+01 pf1-buf PIC X(262144).
+01 pf2-buf PIC X(262144).
+01 pf1-len BINARY-LONG VALUE 0.
+01 pf2-len BINARY-LONG VALUE 0.
 01 flat-nm PIC X(8).
 01 cast-n BINARY-LONG VALUE 0.
 01 cast-fr BINARY-LONG VALUE 0.
@@ -218,6 +227,7 @@ boot-fin.
     MOVE 10 TO fin-x
     MOVE 10 TO fin-y
     MOVE 0 TO fin-pack
+    MOVE 0 TO fin-bun
     MOVE 1 TO fin-ep
     IF map-name(1:3) = "MAP"
         PERFORM pick-pack
@@ -324,6 +334,11 @@ tick-fin.
         PERFORM cast-tick
         EXIT PARAGRAPH
     END-IF
+    IF fin-stage = 1 AND fin-bun = 1
+        ADD 1 TO fin-count
+        PERFORM draw-bunny
+        EXIT PARAGRAPH
+    END-IF
     IF fin-stage NOT = 0
         ADD 1 TO fin-count
         EXIT PARAGRAPH
@@ -367,7 +382,10 @@ key-fin.
         PERFORM show-art
         EXIT PARAGRAPH
     END-IF
-    IF fin-stage = 1 AND fin-count > 10
+    IF fin-stage = 1 AND fin-bun = 1 AND fin-count > 1130
+        MOVE 9 TO fin-stage
+    END-IF
+    IF fin-stage = 1 AND fin-bun = 0 AND fin-count > 10
         MOVE 9 TO fin-stage
     END-IF
     .
@@ -517,9 +535,100 @@ show-art.
         END-IF
     END-IF
     IF fin-ep = 3
+        PERFORM load-bunny
+        IF fin-bun = 1
+            MOVE ALL X"00" TO fb
+            MOVE -1 TO fin-bstage
+        END-IF
         MOVE "bunny" TO snd-name
         MOVE 1 TO mus-loop
         CALL "mus-play" USING snd-name mus-loop
+    END-IF
+    .
+
+load-bunny.
+    MOVE 0 TO fin-bun
+    MOVE "PFUB1" TO lname
+    CALL "wad-find" USING lname lump-id
+    IF lump-id < 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "wad-read-num" USING lump-id pf1-buf cap-art pf1-len
+    MOVE "PFUB2" TO lname
+    CALL "wad-find" USING lname lump-id
+    IF lump-id < 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "wad-read-num" USING lump-id pf2-buf cap-art pf2-len
+    IF pf1-len >= 8 AND pf2-len >= 8
+        MOVE 1 TO fin-bun
+    END-IF
+    .
+
+draw-bunny.
+    MOVE ALL X"00" TO fb
+    MOVE 320 TO scroll-n
+    IF fin-count >= 230
+        COMPUTE scroll-n = fin-count - 230
+        DIVIDE scroll-n BY 2 GIVING scroll-n
+        COMPUTE scroll-n = 320 - scroll-n
+        IF scroll-n < 0
+            MOVE 0 TO scroll-n
+        END-IF
+    END-IF
+    PERFORM VARYING col-x FROM 0 BY 1 UNTIL col-x >= 320
+        COMPUTE src-col = col-x + scroll-n
+        IF src-col < 320
+            CALL "patch_column" USING BY REFERENCE fb BY VALUE col-x
+                BY REFERENCE pf2-buf BY VALUE pf2-len BY VALUE src-col
+        ELSE
+            COMPUTE src-col = src-col - 320
+            CALL "patch_column" USING BY REFERENCE fb BY VALUE col-x
+                BY REFERENCE pf1-buf BY VALUE pf1-len BY VALUE src-col
+        END-IF
+    END-PERFORM
+    IF fin-count < 1130
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO stage-n
+    IF fin-count >= 1180
+        COMPUTE stage-n = fin-count - 1180
+        DIVIDE stage-n BY 5 GIVING stage-n
+        IF stage-n > 6
+            MOVE 6 TO stage-n
+        END-IF
+    END-IF
+    IF stage-n NOT = fin-bstage
+        IF fin-bstage >= 0
+            MOVE "pistol" TO snd-name
+            CALL "sfx-play" USING snd-name
+        END-IF
+        IF stage-n = 0 AND fin-bstage < 0
+            MOVE "pistol" TO snd-name
+            CALL "sfx-play" USING snd-name
+        END-IF
+        MOVE stage-n TO fin-bstage
+        MOVE "END0" TO lname
+        EVALUATE stage-n
+            WHEN 1 MOVE "1" TO lname(4:1)
+            WHEN 2 MOVE "2" TO lname(4:1)
+            WHEN 3 MOVE "3" TO lname(4:1)
+            WHEN 4 MOVE "4" TO lname(4:1)
+            WHEN 5 MOVE "5" TO lname(4:1)
+            WHEN 6 MOVE "6" TO lname(4:1)
+            WHEN OTHER MOVE "0" TO lname(4:1)
+        END-EVALUATE
+        CALL "wad-find" USING lname lump-id
+        IF lump-id >= 0
+            CALL "wad-read-num" USING lump-id art-buf cap-art nread
+        ELSE
+            MOVE 0 TO nread
+        END-IF
+    END-IF
+    IF nread >= 8
+        MOVE 108 TO fin-x
+        MOVE 68 TO fin-y
+        CALL "v-draw-patch" USING fb art-buf nread ink-n fin-x fin-y
     END-IF
     .
 

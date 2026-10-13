@@ -749,6 +749,9 @@ main-floor.
         SUBTRACT saved-n FROM ply-armor
         SUBTRACT saved-n FROM dmg-n
     END-IF
+    IF ply-skill = 0
+        DIVIDE dmg-n BY 2 GIVING dmg-n
+    END-IF
     IF dmg-n > 0
         SUBTRACT dmg-n FROM ply-hp
         IF ply-hp < 0
@@ -764,7 +767,7 @@ main-floor.
     END-IF
     MOVE 1 TO hurt-out
     IF spec-n = 11 AND ply-hp <= 10 AND ply-exit = 0
-        MOVE 35 TO ply-exit
+        MOVE 1 TO ply-exit
     END-IF
     GOBACK.
 
