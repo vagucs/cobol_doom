@@ -1,5 +1,9 @@
 # cobol_doom
 
+![DOOM rodando em GnuCOBOL com SDL2](screenshot/doom.png)
+
+**Vídeo:** [DOOM rodando em GnuCOBOL — 80 a 180 FPS](https://youtu.be/fAJ51Vo9T58)
+
 DOOM generic portado de **[python_doom](https://github.com/vagucs/python_doom)** para **GnuCOBOL + SDL2**.
 
 Por **Wagner Nunes da Silva**
@@ -10,7 +14,7 @@ Por **Wagner Nunes da Silva**
 - [www.vagucs.com.br](https://www.vagucs.com.br)
 - [LinkedIn](https://www.linkedin.com/in/wagner-nunes-da-silva-b0a15360)
 
-Esta árvore é aquele motor em Python, agora em COBOL. O laço do jogo fica em COBOL. Um arquivo C pequeno fala com a SDL2 para a janela, o teclado e a textura. Não há rato. O MCI do Windows toca o MIDI mais adiante, porque a SDL2 não toca.
+Sim: o jogo é feito em COBOL. O laço, o mapa, a vista, as portas, as armas, os monstros, o menu e o placar estão nos `.cob`. Seis arquivos em `src/` são a borda que o GnuCOBOL não cobre: a janela SDL2, o som, a leitura binária do WAD, a conta de 32 bits, a escala da planta e o arquivo dos saves. O rato fica de fora.
 
 English version: [README.md](README.md)
 
@@ -18,23 +22,24 @@ English version: [README.md](README.md)
 
 ## O que é este projeto
 
-`python_doom` é um motor de DOOM condensado e jogável, em Python. Este diretório é a **mesma peça de estudo**, começada em COBOL:
+`python_doom` é um motor de DOOM condensado e jogável, em Python. Este diretório é a **mesma peça de estudo**, reescrita em COBOL:
 
-- Janela, teclas, cópia da tela: **SDL2**, chamada do COBOL com `CALL`
+- Janela, teclas, cópia da tela e PCM: **SDL2**, chamada do COBOL com `CALL`
 - Framebuffer: 320×200, esticado numa janela de 640×400
-- Ponto fixo: o mesmo estouro 16.16 de `doom/compat.py`, em `src/compat.c`
-- Rato: de fora
-
-O programa confere o ponto fixo, lê um IWAD, carrega texturas e flats e desenha a vista em primeira pessoa do E1M1 (ou do MAP01, quando o IWAD é o Doom 2): paredes, piso, teto, céu, os objetos desse primeiro quadro e a pistola já levantada. As setas andam e giram. Shift corre. Alt, com as setas laterais, anda de lado, como a vírgula e o ponto. Espaço, ou E, abre a porta à frente: o teto sobe, espera e volta a descer. Ctrl dispara a pistola: o cano recua, o clarão aparece, o tiro acerta a parede ou quem está na frente, e quem morre cai. Zumbi e sargento acordam, andam e atiram. O diabrete corre, morde de perto ou solta uma bola de fogo. O demônio morde. Quando a vida do jogador acaba, a pistola some, os controles param e a vista desce até o chão. Cada passo segue o relógio do jogo e redesenha a vista, também enquanto a porta, o tiro ou um monstro se move. Uma porta fechada impede a passagem. Esc, ou fechar a janela, sai. A barra embaixo mostra a vida, a munição da pistola, a armadura e a cara, que fica mais machucada quando um tiro acerta e vira a cara de morto quando a vida acaba. Andar sobre um item apanha: estimulante e kit sobem a vida até 100, a esfera passa de 100, a armadura verde vale 100 e a azul 200, a munição entra no contador e a chave aparece na barra. Uma arma acende o número amarelo, soma a munição dela e sobe na mão. As teclas 1 a 7 trocam a arma: 1 é o soco, 2 a pistola, 3 a espingarda, 4 a metralhadora e 5 o míssil. A espingarda solta sete balas, a metralhadora gasta balas e a motosserra corta de perto. Foguete, plasma e BFG disparam. O foguete voa e estoura, o plasma é um raio rápido e o BFG varre quem está na frente. O interruptor da saída troca a face e, um segundo depois, abre o mapa seguinte. As armas, a munição, a vida e as chaves acompanham. O lodo verde tira vida a cada segundo, parado ou andando, e a armadura absorve uma parte. Quando a vida cai, a tela fica vermelha por um instante e volta ao normal. No golpe, a cara olha para quem atirou, o impacto empurra o jogador para trás e, no lodo, a cara mostra os dentes por um segundo. iddqd liga a imortalidade e a cara de deus. idkfa dá todas as armas, a munição, a armadura e as chaves. idfa faz o mesmo sem as chaves. idclip e idspispopd atravessam paredes. A plataforma desce, espera e sobe. A escada sobe em degraus. O teleporte leva ao destino. A porta trancada só abre com a chave, e a grade mostra os vãos. A tela inicial abre o menu. Novo jogo derrete para a fase. Esc abre o menu. Menos e igual mudam o tamanho da vista, e a opção Resolução muda a janela. A saída mostra a contagem e derrete para o mapa seguinte. O espectro aparece translúcido e morde. O barão e o cavaleiro do inferno mordem de perto e soltam uma bola de fogo. Os efeitos sonoros e a música tocam: tiro, porta, monstro, item, dor, morte e a música da fase. Segurar Ctrl mantém o tiro, salvo o lança-mísseis e o BFG, que esperam um novo aperto.
+- Passo: cerca de 28 ms, perto do tic de 35 Hz
+- Vista: BSP, paredes, piso, teto, céu, sprites e a arma na mão
+- Mapa: VERTEXES, LINEDEFS, SIDEDEFS, SECTORS, SEGS, SSECTORS, NODES, THINGS, BLOCKMAP, REJECT
+- Jogo: andar, portas, elevadores, escadas, teleporte, interruptores, saída, itens, armas, barra, automapa no Tab, som `DS*`, música MUS→MIDI, menu no Esc, dificuldade, seis slots de save, contagem, derretimento ao trocar de tela, final do episódio (o coelho do episódio 3 inclusive) e inimigos que olham, perseguem e atacam
 
 É preciso um IWAD legal (shareware `doom1.wad` ou comercial `doom.wad` / `doom2.wad`). Este repositório não traz WAD comercial.
 
-É um **port educacional condensado**: o motor será COBOL, a camada nativa é a SDL2.
+É um **port educacional condensado**: o motor é COBOL. A camada em C é só o que o `CALL` precisa para sair do programa.
 
 Fora desta árvore:
 
 - Rato
 - Rede, joystick, CD de áudio
+- Save binário do vanilla (os slots são texto, `doomsav0.dsg` a `doomsav5.dsg`, com o cabeçalho `COBDOOM1`)
 
 ---
 
@@ -45,15 +50,78 @@ Este projeto é uma **peça de estudo**. O port em Python já tirou o pré-proce
 O que ele pretende ensinar:
 
 - **Python, depois COBOL.** Abra `python_doom/doom/` ao lado de `cobol_doom/`. Os nomes ficam perto (`fixed_mul`, `as_i32`) para os dois arquivos ficarem lado a lado.
-- **Estouro de 32 bits, fora do `COMPUTE`.** Um `COMPUTE` do COBOL em item decimal não reproduz o deslocamento 16.16. `src/compat.c` é a mesma conta de `compat.py`, e o COBOL chama.
-- **Tabelas 1-based, dados 0-based.** O `OCCURS` do COBOL começa em 1. Os lumps do WAD continuam 0-based nos dados e ficam no slot `número + 1`, como nos ports Lua e Julia.
-- **Onde o COBOL basta.** O laço, o mapa e a vista ficam em COBOL. A SDL2 é a janela e o teclado. Seno, tangente e arco-tangente ficam em `src/compat.c`.
+- **Estouro de 32 bits, fora do `COMPUTE`.** Um `COMPUTE` do GnuCOBOL em `BINARY-LONG` arredonda. O produto 16.16 precisa estourar como no C. Essa conta mora em `src/compat.c`, igual a `doom/compat.py`, e o COBOL chama.
+- **Tabelas 1-based, dados 0-based.** O `OCCURS` começa em 1. Os lumps do WAD continuam 0-based nos dados e ficam no slot `número + 1`.
+- **Onde o COBOL basta.** Quem atira, qual porta abre e o que entra no framebuffer ficam nos `.cob`. O C não decide regra de jogo.
 
 Caminho sugerido:
 
-1. Rode `run.bat` e leia `main.cob` — a conferência do ponto fixo, o IWAD e a vista do E1M1.
-2. Compare `view.cob` com `python_doom/doom/render.py`, `sprites.cob` com `doom/sprites.py`, `map.cob` com `doom/world.py`, e `rdata.cob` com `doom/r_data.py`.
-3. Compare `wad.cob` com `doom/wad.py`, e `src/compat.c` com `doom/compat.py`. O `src/video.c` não lê o rato.
+1. Rode `run.bat` e leia `main.cob` — o IWAD, o menu e o laço de 28 ms.
+2. Compare `view.cob` com `python_doom/doom/render.py`, `map.cob` com `doom/world.py` e `wad.cob` com `doom/wad.py`.
+3. Compare `src/compat.c` com `doom/compat.py`. O `src/video.c` não lê o rato.
+
+---
+
+## De Python para COBOL
+
+Listas em Python são 0-based. `OCCURS` é 1-based. Um objeto vira um grupo `EXTERNAL` compartilhado pelos programas, no `COPY`.
+
+| Python (`python_doom`) | COBOL (`cobol_doom`) |
+| --- | --- |
+| `thing.x` | `mo-x(i)` ou `ply-x` |
+| `None` | espaços, ou zero |
+| `items[0]` | `OCCURS`, slot = índice + 1 |
+| classe | `PROGRAM-ID` e um `COPY` `EXTERNAL` |
+| `int` sem limite | `BINARY-LONG`, 32 bits; o produto largo fica em C |
+| `&`, `\|`, `^` | `CALL "bit_and"`, `bit_or`, `bit_xor` |
+| `x >> n` | `CALL "ushr32"` / `CALL "shar32"` |
+| `a // b` | `DIVIDE` sem `ROUNDED`, ou `CALL "floor_div_i"` |
+| `fixed_mul` / `fixed_div` | `CALL "fixed_mul"` / `CALL "fixed_div"` |
+| framebuffer `bytearray` | `PIC X(64000)` |
+| pygame | SDL2, por `CALL` |
+| `+=` | `CALL "add_i32"` — um `COMPUTE` arredonda |
+
+Escrever um campo do `COPY` `EXTERNAL` aparece nos outros programas, do mesmo jeito que um objeto em Python.
+
+### Lado a lado: o impulso
+
+Python (`doom/player.py`):
+
+```python
+def thrust(mo: Mobj, angle: int, move: int) -> None:
+    mo.momx += fixed_mul(move, fine_cos(angle))
+    mo.momy += fixed_mul(move, fine_sin(angle))
+```
+
+COBOL (`walk.cob`), no tic de andar:
+
+```cobol
+CALL "fine_cos_ang" USING BY VALUE ply-ang RETURNING cs
+CALL "fine_sin_ang" USING BY VALUE ply-ang RETURNING sn
+CALL "fixed_mul" USING BY VALUE move-n BY VALUE cs RETURNING tmp
+CALL "add_i32" USING BY VALUE ply-momx BY VALUE tmp RETURNING ply-momx
+CALL "fixed_mul" USING BY VALUE move-n BY VALUE sn RETURNING tmp
+CALL "add_i32" USING BY VALUE ply-momy BY VALUE tmp RETURNING ply-momy
+```
+
+O Python soma no campo do objeto. O COBOL faz as mesmas duas multiplicações 16.16, e a soma volta por `add_i32` para caber em 32 bits. Seno e cosseno do ângulo também vêm do C, porque a tabela fina não cabe num `COMPUTE` decimal.
+
+---
+
+## O que ficou em C, e por quê
+
+O motor é COBOL. Cada arquivo abaixo é uma função que o `CALL` alcança. Nenhum deles escolhe a fase, a arma ou o monstro.
+
+| Arquivo | Papel | Por que não ficou em COBOL |
+| --- | --- | --- |
+| `src/video.c` | Janela SDL2, paleta, teclado, Alt+Enter | O compilador não liga a SDL2 |
+| `src/audio.c` | Fila PCM dos lumps `DS*` e MIDI pela MCI | Dispositivo de som e `winmm` |
+| `src/wadio.c` | Leitura binária e caminho do IWAD | `PIC X` preenche com espaço; o lump é byte cru |
+| `src/compat.c` | Estouro de 32 bits, 16.16, seno, arco-tangente, lado do nó | `COMPUTE` arredonda e o produto estoura diferente do C |
+| `src/mapdraw.c` | Encaixa a planta na tela, a seta e a coluna do patch | Escala em ponto flutuante e os posts do patch |
+| `src/slotio.c` | Abre `doomsavN.dsg` e lê uma linha | O texto do save é montado no COBOL; o arquivo precisa de fim de linha de verdade |
+
+`sound.cob` decide qual efeito toca. `audio.c` só mistura. `save.cob` monta o texto do slot. `slotio.c` só grava e lê a linha. `map.cob` escolhe a cor de cada parede. `mapdraw.c` só transforma coordenada em pixel.
 
 ---
 
@@ -63,9 +131,10 @@ Caminho sugerido:
 | --- | --- | --- |
 | Linguagem | GnuCOBOL 3.2 | Python 3.10+ |
 | Janela, teclas, cópia | SDL2, `CALL` a partir do COBOL | pygame 2.x |
+| Som | SDL2 para os efeitos, MCI para o MIDI | mixer do pygame, MCI no Windows |
 | Ponto fixo 16.16 | `src/compat.c` | `doom/compat.py` |
 | Rato | de fora | usado para olhar e atirar |
-| IWAD | `wad.cob`, `rdata.cob` e `view.cob`, vista do E1M1 | os mesmos lumps |
+| IWAD | os mesmos lumps | os mesmos lumps |
 | Compilação | `run.bat` (`cobc` + o gcc UCRT64) | `pip install -r requirements.txt` |
 
 O compilador usado aqui é o pacote MSYS2 `mingw-w64-ucrt-x86_64-gnucobol`, com o `gcc` e a `SDL2` de `C:\msys64\ucrt64`. O `run.bat` coloca essa pasta `bin` no `PATH` para achar a `SDL2.dll`.
@@ -82,65 +151,103 @@ run.bat
 
 O `build.bat` só compila. A janela é 640×400. A textura é 320×200.
 
-O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo, como nos outros portes. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito.
+O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito.
 
 ```
 run.bat -iwad C:\wads\doom1.wad -fps
 ```
 
-Os cheats de sempre valem em pé: `iddqd`, `idkfa`, `idfa`, `idclip`, `idspispopd`, `idchoppers`, `idmypos`, `idbehold` e a letra seguinte (`v` invulnerável, `s` força, `i` invisível, `r` traje, `l` luz), `idmus` e `idclev` com dois números. `idclev16` abre o E1M6. `iddt` não tem mapa automático nesta versão.
+Se o IWAD tem `MAP01`, o jogo novo pula o menu de episódio e abre a dificuldade, depois o MAP01. No shareware, o episódio 1 é o único; os outros avisam que pedem a versão registrada.
 
 ---
 
 ## Teclas
 
+As letras não andam. Elas alimentam os truques. O movimento fica nas setas.
+
 | Tecla | Ação |
 | --- | --- |
-| **Seta para cima** ou **W** | Andar para a frente |
-| **Seta para baixo** ou **S** | Andar para trás |
-| **Seta esquerda** ou **A** | Girar à esquerda |
-| **Seta direita** ou **D** | Girar à direita |
+| **Setas** | Frente, trás, virar |
 | **Shift** | Correr |
 | **Alt** com esquerda ou direita | Andar de lado |
 | **Vírgula** e **ponto** | Andar de lado |
-| **Espaço** ou **E** | Abrir a porta à frente |
-| **Ctrl** | Disparar a pistola |
-| **Esc** | Sair |
+| **Espaço** ou **E** | Usar o que está à frente |
+| **Ctrl** | Atirar. Segurar repete, salvo o BFG |
+| **1** a **7** | Soco, pistola, espingarda, metralhadora, míssil, plasma, BFG. O **1** pega a motosserra quando ela já foi apanhada |
+| **Tab** | Automapa. O jogo continua por baixo |
+| **-** / **=** | Vista menor ou maior |
+| **Alt+Enter** | Tela cheia |
+| **Esc** | Menu. Na tela de título, sai |
 | Fechar a janela | Sair |
 
-O rato é ignorado.
+O rato é ignorado. Sair do jogo está no item Sair do menu.
+
+### Truques
+
+Digite durante a fase, com o menu fechado. Sem Enter.
+
+| Código | Efeito |
+| --- | --- |
+| **IDDQD** | Modo deus |
+| **IDKFA** | Todas as armas, munição, chaves e armadura |
+| **IDFA** | Armas, munição e armadura |
+| **IDCLIP** / **IDSPISPOPD** | Sem colisão |
+| **IDCHOPPERS** | Motosserra |
+| **IDMYPOS** | Coordenadas e ângulo |
+| **IDDT** | No mapa: todas as paredes, depois as coisas, depois o normal |
+| **IDBEHOLD** | Depois **V** **S** **I** **R** **A** **L** (invulnerável, força, invisível, traje, mapa do computador, luz) |
+| **IDMUS** + 2 dígitos | Troca a música |
+| **IDCLEV** + 2 dígitos | Warp. `16` abre o E1M6. Num IWAD com `MAP01`, o número é o mapa |
+
+Os seis slots ficam no menu Carregar e Salvar. A descrição gravada é o nome do mapa.
 
 ---
 
 ## Organização
 
 ```
-main.cob             entrada, a vista, o andar, o uso, o disparo e os monstros
-walk.cob             um tic de movimento e paredes
-door.cob             portas verticais, sobem e descem o teto
-gun.cob              pistola, o tiro, o sangue e o fumo
-enemy.cob            monstros acordam, andam e atacam
-status.cob           barra de vida, munição, armadura e a cara
-item.cob             itens do chão: vida, armadura, munição, chaves e armas
-playstate.cpy        posicao do jogador
-wad.cob              doom/wad.py
-wadstate.cpy         tabela de lumps (OCCURS, slot = lump + 1)
-view.cob             doom/render.py, paredes, piso, teto, céu, sprites, pistola
-sprites.cob          doom/sprites.py, quadros e objetos do mapa
-sprstate.cpy         quadros dos sprites e objetos
-sprdata.cpy          estado inicial de cada doomednum
-map.cob              doom/world.py, planta conservada na árvore
-mapstate.cpy         vértices, linhas, setores
-rdata.cob            doom/r_data.py
-rdata.cpy            texturas, flats, colormap
-vvideo.cob           V_DrawPatch e traço
-build.bat            cobc
-run.bat              PATH, compila e abre a janela
-src/compat.c         doom/compat.py, mais seno, tangente e arco-tangente
-src/wadio.c          leitura binária e caminhos
-src/mapdraw.c        escala da planta e cores da paleta
-src/video.c          janela, paleta e teclado SDL2
+main.cob             laço, menu, teclas e a troca de fase
+walk.cob             um tic de movimento
+door.cob             portas, elevadores, escadas, teleporte, interruptores
+gun.cob              armas, o tiro e a explosão
+enemy.cob            monstros
+status.cob           barra e a cara
+item.cob             itens do chão
+cheat.cob            truques
+ui.cob               título, menus, placar e o derretimento
+sound.cob            qual efeito ou música tocar
+finale.cob           texto final, elenco e o coelho
+save.cob             texto dos seis slots
+view.cob             vista 3D
+sprites.cob          quadros e o que nasce no mapa
+map.cob              leitura do mapa e o desenho da planta
+rdata.cob            texturas, flats e colormap
+wad.cob              diretório do IWAD
+vvideo.cob           patch e traço no framebuffer
+screenshot/doom.png  a imagem do topo
+src/                 a borda em C, descrita acima
 ```
+
+| Caminho | Python |
+| --- | --- |
+| `src/compat.c` | `doom/compat.py` |
+| `wad.cob` | `doom/wad.py` |
+| `src/video.c`, `src/audio.c` | `doom/video.py`, `doom/sound.py` |
+| `vvideo.cob` | `doom/v_video.py` |
+| `rdata.cob` | `doom/r_data.py` |
+| `view.cob` | `doom/render.py` |
+| `map.cob` | `doom/world.py` e a planta de `doom/am_map.py` |
+| `walk.cob`, `gun.cob` | `doom/player.py` |
+| `door.cob` | `doom/specials.py` |
+| `sprites.cob` | `doom/sprites.py` |
+| `enemy.cob` | `doom/enemy.py` |
+| `status.cob` | `doom/status.py` |
+| `sound.cob` | o que `doom/sound.py` escolhe tocar |
+| `ui.cob` | `doom/menu.py`, `doom/wi_stuff.py`, `doom/wipe.py` |
+| `finale.cob` | `doom/finale.py` |
+| `save.cob`, `src/slotio.c` | `doom/saveg.py` |
+| `cheat.cob` | a máquina de truques em `doom/game.py` |
+| `main.cob` | a entrada do Python |
 
 ---
 
