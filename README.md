@@ -151,10 +151,11 @@ run.bat
 
 `build.bat` only compiles. The window is 640×400. The texture is 320×200.
 
-The IWAD is the first file that exists among `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad`, and `freedoom2.wad`. The search starts at `DOOMWADDIR` or `DOOMWADPATH` when that variable is set, then the current folder and parent folders. `-iwad` chooses the file. A bare path ending in `.wad` also works. `-fps` shows the frames per second in the top-right corner.
+The IWAD is the first file that exists among `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad`, and `freedoom2.wad`. The search starts at `DOOMWADDIR` or `DOOMWADPATH` when that variable is set, then the current folder and parent folders. `-iwad` chooses the file. A bare path ending in `.wad` also works. `-fps` shows the frames per second in the top-right corner. The window starts with vsync, so that number can lock to the monitor refresh. `-novsync` presents without that wait.
 
 ```
 run.bat -iwad C:\wads\doom1.wad -fps
+run.bat -fps -novsync
 ```
 
 When the IWAD contains `MAP01`, a new game skips the episode menu, asks for the skill, and opens MAP01. In the shareware, episode 1 is the only one; the others say they need the registered version.

@@ -66,12 +66,16 @@ static void ignore_mouse(void)
     SDL_ShowCursor(SDL_DISABLE);
 }
 
-int video_init(int w, int h, int scale)
+int video_init(int w, int h, int scale, int vsync)
 {
+    Uint32 flags;
+
     if (w < 1 || h < 1)
         return 1;
     if (scale < 1)
         scale = 1;
+    if (!vsync)
+        SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         return 2;
     sdl_up = 1;
@@ -81,12 +85,16 @@ int video_init(int w, int h, int scale)
         w * scale, h * scale, SDL_WINDOW_SHOWN);
     if (window == NULL)
         return 3;
-    renderer = SDL_CreateRenderer(window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    flags = SDL_RENDERER_ACCELERATED;
+    if (vsync)
+        flags |= SDL_RENDERER_PRESENTVSYNC;
+    renderer = SDL_CreateRenderer(window, -1, flags);
     if (renderer == NULL)
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     if (renderer == NULL)
         return 4;
+    if (!vsync)
+        SDL_RenderSetVSync(renderer, 0);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, w, h);
     if (texture == NULL)

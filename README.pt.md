@@ -151,10 +151,11 @@ run.bat
 
 O `build.bat` só compila. A janela é 640×400. A textura é 320×200.
 
-O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito.
+O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito. A janela nasce com vsync, então esse número pode travar na taxa do monitor. `-novsync` apresenta sem essa espera.
 
 ```
 run.bat -iwad C:\wads\doom1.wad -fps
+run.bat -fps -novsync
 ```
 
 Se o IWAD tem `MAP01`, o jogo novo pula o menu de episódio e abre a dificuldade, depois o MAP01. No shareware, o episódio 1 é o único; os outros avisam que pedem a versão registrada.

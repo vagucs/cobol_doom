@@ -45,6 +45,7 @@ WORKING-STORAGE SECTION.
 01 quote-n BINARY-LONG.
 01 suf-at BINARY-LONG.
 01 fps-on BINARY-LONG VALUE 0.
+01 vsync-n BINARY-LONG VALUE 1.
 01 fps-n BINARY-LONG VALUE 0.
 01 fps-show BINARY-LONG VALUE 0.
 01 fps-ms BINARY-LONG VALUE 0.
@@ -182,11 +183,15 @@ PROCEDURE DIVISION.
         STOP RUN RETURNING 6
     END-IF
     CALL "video_init" USING BY VALUE 320 BY VALUE 200 BY VALUE 2
+        BY VALUE vsync-n
         RETURNING rc
     IF rc NOT = 0
         DISPLAY "SDL2 nao abriu a janela " rc
         CALL "video_shutdown"
         STOP RUN RETURNING rc
+    END-IF
+    IF vsync-n = 0
+        DISPLAY "vsync off"
     END-IF
     CALL "audio_init" RETURNING rc
     CALL "mus-title"
@@ -1174,6 +1179,10 @@ take-tok.
     END-IF
     IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-FPS"
         MOVE 1 TO fps-on
+        EXIT PARAGRAPH
+    END-IF
+    IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-NOVSYNC"
+        MOVE 0 TO vsync-n
         EXIT PARAGRAPH
     END-IF
     IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-IWAD"
