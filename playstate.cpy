@@ -27,6 +27,9 @@
    05 ply-pend BINARY-LONG VALUE 0.
    05 ply-hp BINARY-LONG VALUE 100.
    05 ply-shot BINARY-LONG VALUE 0.
+   *> P_NoiseAlert uses the fire-time position (before walk XY that tic).
+   05 ply-shot-x BINARY-LONG VALUE 0.
+   05 ply-shot-y BINARY-LONG VALUE 0.
    05 ply-armor BINARY-LONG VALUE 0.
    05 ply-shell BINARY-LONG VALUE 0.
    05 ply-cell BINARY-LONG VALUE 0.
@@ -82,3 +85,40 @@
    05 ply-skill BINARY-LONG VALUE 2.
    05 ply-iddt BINARY-LONG VALUE 0.
    05 ply-mapon BINARY-LONG VALUE 0.
+   05 ply-sfxvol BINARY-LONG VALUE 8.
+   05 ply-musvol BINARY-LONG VALUE 8.
+   *> Demo playback (Harbour/python -playdemo / -timedemo).
+   05 demo-on BINARY-LONG VALUE 0.
+   05 demo-timing BINARY-LONG VALUE 0.
+   05 demo-single BINARY-LONG VALUE 0.
+   05 demo-long BINARY-LONG VALUE 0.
+   05 demo-p BINARY-LONG VALUE 0.
+   05 demo-len BINARY-LONG VALUE 0.
+   05 demo-gametic BINARY-LONG VALUE 0.
+   05 demo-start-ms BINARY-LONG VALUE 0.
+   05 cmd-fwd BINARY-LONG VALUE 0.
+   05 cmd-side BINARY-LONG VALUE 0.
+   05 cmd-turn BINARY-LONG VALUE 0.
+   05 cmd-btns BINARY-LONG VALUE 0.
+   *> Vanilla P_Random: um unico indice partilhado (gun/enemy/floor).
+   05 ply-rnd BINARY-LONG VALUE 0.
+   *> enemy-tic asks gun-tic to advance this BEXP slot, then returns.
+   05 bexp-slot BINARY-LONG VALUE 0.
+   *> Corpse A_Scream runs in mobj-list order, not during tick-fx.
+   05 scream-slot BINARY-LONG VALUE 0.
+   *> Missile PIT_CheckThing: victim slot, then the missile that hit it.
+   05 hit-slot BINARY-LONG VALUE 0.
+   05 hit-from BINARY-LONG VALUE 0.
+   *> Hitscan damage already rolled. 0 = missile rolls (R%8+1)*damage.
+   05 hit-dmg BINARY-LONG VALUE 0.
+   *> Monster that dealt the hit. 0 = the player.
+   05 hit-who BINARY-LONG VALUE 0.
+   *> Monster hitscan: gun-tic aims (mode 1) or reports the hit (mode 2).
+   05 ray-slot BINARY-LONG VALUE 0.
+   05 ray-ang BINARY-LONG VALUE 0.
+   05 ray-mode BINARY-LONG VALUE 0.
+   05 ray-sl BINARY-LONG VALUE 0.
+   05 ray-hit BINARY-LONG VALUE 0.
+   05 ray-mo BINARY-LONG VALUE 0.
+   *> P_DamageMobj source. 0 = none or the player himself.
+   05 ply-atk BINARY-LONG VALUE 0.

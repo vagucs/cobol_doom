@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -107,6 +107,9 @@ WORKING-STORAGE SECTION.
 01 got-sw BINARY-LONG.
 01 other-sw BINARY-LONG.
 01 key-ok BINARY-LONG.
+01 turbo-bit BINARY-LONG VALUE 0.
+01 light-bright BINARY-LONG.
+01 light-min BINARY-LONG.
 01 step-h BINARY-LONG.
 01 spd-h BINARY-LONG.
 01 pic-n BINARY-LONG.
@@ -114,7 +117,18 @@ WORKING-STORAGE SECTION.
 01 nxt-sec BINARY-LONG.
 01 busy-sec BINARY-LONG.
 01 tel-done BINARY-LONG.
+01 rnd-fog BINARY-LONG.
 01 walk-i BINARY-LONG.
+01 box-l BINARY-LONG.
+01 box-r BINARY-LONG.
+01 box-b BINARY-LONG.
+01 box-t BINARY-LONG.
+01 p1 BINARY-LONG.
+01 p2 BINARY-LONG.
+01 base-h BINARY-LONG.
+01 open-bot BINARY-LONG.
+01 touch-n BINARY-LONG.
+01 stood-n BINARY-LONG.
 01 lname PIC X(8).
 01 lump-n BINARY-LONG.
 01 byte-n BINARY-LONG.
@@ -143,6 +157,20 @@ main-door.
     IF door-ready = 0
         PERFORM init-doors
         MOVE 1 TO door-ready
+    END-IF
+    *> 3=use only (playerThink, before XY — no scan/tick).
+    IF act-mode = 3
+        PERFORM do-use
+        MOVE 0 TO busy-out
+        GOBACK
+    END-IF
+    *> 4 = monster crossed a line inside P_TryMove. Do not tick doors here.
+    IF act-mode = 4
+        MOVE cross-ln TO li
+        PERFORM mon-crossed
+        MOVE 0 TO busy-out
+        MOVE 0 TO moved-out
+        GOBACK
     END-IF
     PERFORM scan-cross
     IF act-mode = 1
@@ -215,17 +243,21 @@ scan-cross.
     .
 
 start-lower.
+    *> Harbour turboLower: FLOORSPEED*4; dest = highest surrounding (+8 if ≠).
     MOVE 262144 TO spd-h
+    MOVE 1 TO turbo-bit
     MOVE 0 TO got-sw
     PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
         IF sec-tag(sec-slot) = ln-tag(li)
             PERFORM arm-floor
         END-IF
     END-PERFORM
+    MOVE 0 TO turbo-bit
     .
 
 lower-surround.
     MOVE 65536 TO spd-h
+    MOVE 0 TO turbo-bit
     MOVE 0 TO got-sw
     MOVE 0 TO hit-tag
     IF ln-tag(li) = 0
@@ -287,6 +319,7 @@ release-floor.
     MOVE pend-tag TO tmp-n
     MOVE 0 TO pend-tag
     MOVE 65536 TO spd-h
+    MOVE 0 TO turbo-bit
     MOVE 0 TO got-sw
     PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
         IF sec-tag(sec-slot) = tmp-n
@@ -323,7 +356,18 @@ arm-floor.
     IF got-nb = 0
         EXIT PARAGRAPH
     END-IF
-    IF nb-h >= sec-floor-h(sec-slot)
+    *> Harbour turboLowerDest: if dest ≠ current floor, add 8*FRACUNIT.
+    IF turbo-bit = 1
+        IF nb-h NOT = sec-floor-h(sec-slot)
+            CALL "add_i32" USING BY VALUE nb-h BY VALUE 524288
+                RETURNING nb-h
+        END-IF
+    ELSE
+        IF nb-h >= sec-floor-h(sec-slot)
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    IF nb-h = sec-floor-h(sec-slot)
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO fl-i
@@ -340,7 +384,11 @@ arm-floor.
     MOVE sec-slot TO fl-sec(fl-i)
     MOVE nb-h TO fl-dest(fl-i)
     MOVE spd-h TO fl-spd(fl-i)
-    MOVE -1 TO fl-dir(fl-i)
+    IF nb-h < sec-floor-h(sec-slot)
+        MOVE -1 TO fl-dir(fl-i)
+    ELSE
+        MOVE 1 TO fl-dir(fl-i)
+    END-IF
     MOVE 0 TO fl-wait(fl-i)
     MOVE 0 TO fl-kind(fl-i)
     MOVE nb-h TO fl-high(fl-i)
@@ -354,6 +402,158 @@ note-neighbor.
     IF got-nb = 0 OR sec-floor-h(bs) > nb-h
         MOVE sec-floor-h(bs) TO nb-h
         MOVE 1 TO got-nb
+    END-IF
+    .
+
+raise-nearest.
+    *> PLATSPEED/2. Texture is the line's front sector. Special cleared.
+    MOVE 32768 TO spd-h
+    MOVE 0 TO got-sw
+    COMPUTE fs = ln-front(li) + 1
+    IF fs < 1 OR fs > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    MOVE sec-floor-pic(fs) TO pic-n
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li)
+            PERFORM arm-raise
+        END-IF
+    END-PERFORM
+    IF got-sw = 1
+        MOVE "stnmov" TO snd-name
+        CALL "sfx-play" USING snd-name
+    END-IF
+    .
+
+raise-low-ceil.
+    *> EV_DoFloor raiseFloor: FLOORSPEED, up, no texture change, no sound.
+    MOVE 65536 TO spd-h
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li)
+            PERFORM arm-raise-ceil
+        END-IF
+    END-PERFORM
+    .
+
+arm-raise-ceil.
+    MOVE sec-slot TO cur-sec
+    PERFORM sector-busy
+    IF busy-sec = 1
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM low-ceiling
+    IF got-nb = 0
+        MOVE sec-ceil-h(cur-sec) TO nb-h
+    END-IF
+    IF nb-h > sec-ceil-h(cur-sec)
+        MOVE sec-ceil-h(cur-sec) TO nb-h
+    END-IF
+    *> Already there: do not leave a thinker that never reaches past-dest.
+    IF nb-h = sec-floor-h(cur-sec)
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM claim-slot
+    IF fl-i = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO fl-on(fl-i)
+    MOVE cur-sec TO fl-sec(fl-i)
+    MOVE nb-h TO fl-dest(fl-i)
+    MOVE spd-h TO fl-spd(fl-i)
+    MOVE 1 TO fl-dir(fl-i)
+    MOVE 0 TO fl-wait(fl-i)
+    MOVE 0 TO fl-kind(fl-i)
+    MOVE nb-h TO fl-high(fl-i)
+    .
+
+low-ceiling.
+    MOVE 0 TO got-nb
+    MOVE 2147483647 TO nb-h
+    PERFORM VARYING walk-i FROM 1 BY 1 UNTIL walk-i > n-line
+        COMPUTE fs = ln-front(walk-i) + 1
+        IF fs = cur-sec AND ln-back(walk-i) >= 0
+            COMPUTE bs = ln-back(walk-i) + 1
+            IF bs >= 1 AND bs <= n-sector
+                AND sec-ceil-h(bs) < nb-h
+                MOVE sec-ceil-h(bs) TO nb-h
+                MOVE 1 TO got-nb
+            END-IF
+        END-IF
+        IF ln-back(walk-i) >= 0
+            COMPUTE fs = ln-back(walk-i) + 1
+            IF fs = cur-sec AND ln-front(walk-i) >= 0
+                COMPUTE bs = ln-front(walk-i) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    AND sec-ceil-h(bs) < nb-h
+                    MOVE sec-ceil-h(bs) TO nb-h
+                    MOVE 1 TO got-nb
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+arm-raise.
+    PERFORM VARYING fl-i FROM 1 BY 1 UNTIL fl-i > 32
+        IF fl-on(fl-i) = 1 AND fl-sec(fl-i) = sec-slot
+            EXIT PARAGRAPH
+        END-IF
+    END-PERFORM
+    MOVE pic-n TO sec-floor-pic(sec-slot)
+    MOVE 0 TO sec-special(sec-slot)
+    MOVE 0 TO got-nb
+    MOVE 2147483647 TO nb-h
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > n-line
+        COMPUTE fs = ln-front(step-n) + 1
+        IF fs = sec-slot AND ln-back(step-n) >= 0
+            COMPUTE bs = ln-back(step-n) + 1
+            PERFORM note-next
+        END-IF
+        COMPUTE bs = ln-back(step-n) + 1
+        IF ln-back(step-n) >= 0 AND bs = sec-slot
+            COMPUTE bs = ln-front(step-n) + 1
+            PERFORM note-next
+        END-IF
+    END-PERFORM
+    IF got-nb = 0 OR nb-h <= sec-floor-h(sec-slot)
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO fl-i
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > 32
+        IF fl-on(step-n) = 0
+            MOVE step-n TO fl-i
+            EXIT PERFORM
+        END-IF
+    END-PERFORM
+    IF fl-i = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO fl-on(fl-i)
+    MOVE sec-slot TO fl-sec(fl-i)
+    MOVE nb-h TO fl-dest(fl-i)
+    MOVE spd-h TO fl-spd(fl-i)
+    MOVE 1 TO fl-dir(fl-i)
+    MOVE 0 TO fl-wait(fl-i)
+    MOVE 0 TO fl-kind(fl-i)
+    MOVE nb-h TO fl-high(fl-i)
+    MOVE 1 TO got-sw
+    .
+
+note-next.
+    IF bs < 1 OR bs > n-sector OR bs = sec-slot
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-floor-h(bs) > sec-floor-h(sec-slot)
+        IF got-nb = 0 OR sec-floor-h(bs) < nb-h
+            MOVE sec-floor-h(bs) TO nb-h
+            MOVE 1 TO got-nb
+        END-IF
     END-IF
     .
 
@@ -384,7 +584,9 @@ drop-floor.
         CALL "sub_i32" USING BY VALUE old-h BY VALUE fl-spd(fl-i)
             RETURNING next-h
         MOVE 0 TO past
-        IF next-h <= fl-dest(fl-i)
+        *> T_MovePlane uses a strict overshoot test. Landing exactly on
+        *> dest is still "ok"; pastdest is the next tic, which does not move.
+        IF next-h < fl-dest(fl-i)
             MOVE fl-dest(fl-i) TO next-h
             MOVE 1 TO past
         END-IF
@@ -392,17 +594,19 @@ drop-floor.
         CALL "add_i32" USING BY VALUE old-h BY VALUE fl-spd(fl-i)
             RETURNING next-h
         MOVE 0 TO past
-        IF next-h >= fl-dest(fl-i)
+        IF next-h > fl-dest(fl-i)
             MOVE fl-dest(fl-i) TO next-h
             MOVE 1 TO past
         END-IF
     END-IF
-    IF next-h = old-h
+    IF next-h = old-h AND past = 0
         EXIT PARAGRAPH
     END-IF
-    MOVE next-h TO sec-floor-h(keep-sec)
-    MOVE 1 TO moved-out
-    PERFORM ride-floor
+    IF next-h NOT = old-h
+        MOVE next-h TO sec-floor-h(keep-sec)
+        MOVE 1 TO moved-out
+        PERFORM ride-floor
+    END-IF
     IF past = 0
         EXIT PARAGRAPH
     END-IF
@@ -418,9 +622,22 @@ ride-floor.
     MOVE ply-x TO try-x
     MOVE ply-y TO try-y
     PERFORM sector-at
-    IF sec-slot = keep-sec AND ply-z = old-h
-        MOVE next-h TO ply-z
-        MOVE next-h TO ply-floor
+    *> thingHeightClip updates floorz for anyone in the sector.
+    *> Snap z only when they were standing on the old floor.
+    IF sec-slot = keep-sec
+        IF ply-floor = old-h
+            MOVE next-h TO ply-floor
+        END-IF
+        IF ply-z = old-h
+            MOVE next-h TO ply-z
+            MOVE next-h TO ply-floor
+        END-IF
+    END-IF
+    *> Center is in the next sector, but the radius still straddles this
+    *> floor. P_ThingHeightClip keeps floorz on the higher opening.
+    IF sec-slot NOT = keep-sec
+        AND (ply-floor = old-h OR ply-z = old-h)
+        PERFORM clip-player
     END-IF
     PERFORM VARYING mi FROM 1 BY 1 UNTIL mi > n-mobj
         IF mo-z(mi) = old-h
@@ -434,6 +651,141 @@ ride-floor.
     END-PERFORM
     .
 
+clip-player.
+    IF ply-z = old-h
+        MOVE 1 TO stood-n
+    ELSE
+        MOVE 0 TO stood-n
+    END-IF
+    CALL "sub_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING box-l
+    CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING box-r
+    CALL "sub_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING box-b
+    CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING box-t
+    MOVE ply-x TO try-x
+    MOVE ply-y TO try-y
+    PERFORM sector-at
+    IF sec-slot < 1 OR sec-slot > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    MOVE sec-floor-h(sec-slot) TO base-h
+    MOVE 0 TO touch-n
+    PERFORM VARYING walk-i FROM 1 BY 1 UNTIL walk-i > n-line
+        PERFORM clip-one-line
+    END-PERFORM
+    IF touch-n = 0
+        EXIT PARAGRAPH
+    END-IF
+    IF ply-floor = old-h OR stood-n = 1
+        MOVE base-h TO ply-floor
+    END-IF
+    IF stood-n = 1
+        MOVE base-h TO ply-z
+        MOVE base-h TO ply-floor
+    END-IF
+    .
+
+clip-one-line.
+    IF box-r <= ln-bl(walk-i) OR box-l >= ln-br(walk-i)
+        OR box-t <= ln-bb(walk-i) OR box-b >= ln-bt(walk-i)
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM ride-box-side
+    IF side-bit NOT = -1
+        EXIT PARAGRAPH
+    END-IF
+    IF ln-back(walk-i) < 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "bit_and" USING BY VALUE ln-flags(walk-i) BY VALUE 1
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE fs = ln-front(walk-i) + 1
+    COMPUTE bs = ln-back(walk-i) + 1
+    IF fs < 1 OR bs < 1 OR fs > n-sector OR bs > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    IF fs = keep-sec OR bs = keep-sec
+        MOVE 1 TO touch-n
+    END-IF
+    IF sec-floor-h(fs) > sec-floor-h(bs)
+        MOVE sec-floor-h(fs) TO open-bot
+    ELSE
+        MOVE sec-floor-h(bs) TO open-bot
+    END-IF
+    IF open-bot > base-h
+        MOVE open-bot TO base-h
+    END-IF
+    .
+
+ride-box-side.
+    MOVE ln-v1(walk-i) TO v1-slot
+    MOVE ln-v2(walk-i) TO tmp-n
+    CALL "delta_shr16" USING BY VALUE vtx-x(tmp-n)
+        BY VALUE vtx-x(v1-slot) RETURNING ldx
+    CALL "delta_shr16" USING BY VALUE vtx-y(tmp-n)
+        BY VALUE vtx-y(v1-slot) RETURNING ldy
+    IF ldx = 0
+        IF box-r < vtx-x(v1-slot)
+            MOVE 1 TO p1
+        ELSE
+            MOVE 0 TO p1
+        END-IF
+        IF box-l < vtx-x(v1-slot)
+            MOVE 1 TO p2
+        ELSE
+            MOVE 0 TO p2
+        END-IF
+        IF ldy < 0
+            CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
+            CALL "bit_xor" USING BY VALUE p2 BY VALUE 1 RETURNING p2
+        END-IF
+    ELSE
+        IF ldy = 0
+            IF box-t > vtx-y(v1-slot)
+                MOVE 1 TO p1
+            ELSE
+                MOVE 0 TO p1
+            END-IF
+            IF box-b > vtx-y(v1-slot)
+                MOVE 1 TO p2
+            ELSE
+                MOVE 0 TO p2
+            END-IF
+            IF ldx < 0
+                CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
+                CALL "bit_xor" USING BY VALUE p2 BY VALUE 1 RETURNING p2
+            END-IF
+        ELSE
+            IF (ldy > 0 AND ldx > 0) OR (ldy < 0 AND ldx < 0)
+                MOVE box-l TO dx
+                MOVE box-t TO dy
+                PERFORM point-side
+                MOVE side-bit TO p1
+                MOVE box-r TO dx
+                MOVE box-b TO dy
+                PERFORM point-side
+                MOVE side-bit TO p2
+            ELSE
+                MOVE box-r TO dx
+                MOVE box-t TO dy
+                PERFORM point-side
+                MOVE side-bit TO p1
+                MOVE box-l TO dx
+                MOVE box-b TO dy
+                PERFORM point-side
+                MOVE side-bit TO p2
+            END-IF
+        END-IF
+    END-IF
+    IF p1 = p2
+        MOVE p1 TO side-bit
+    ELSE
+        MOVE -1 TO side-bit
+    END-IF
+    .
+
 cross-hit.
     MOVE ln-spec(li) TO spec-n
     MOVE ox TO dx
@@ -442,7 +794,28 @@ cross-hit.
     MOVE ln-dx(li) TO ldx
     MOVE ln-dy(li) TO ldy
     PERFORM point-side
-    IF spec-n = 36
+    *> Harbour W1 lights: 12/13/35/104 (E1M3 blue-key room = 35).
+    IF spec-n = 12
+        MOVE 0 TO light-bright
+        PERFORM light-turn-on
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    IF spec-n = 13
+        MOVE 255 TO light-bright
+        PERFORM light-turn-on
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    IF spec-n = 35
+        MOVE 35 TO light-bright
+        PERFORM light-turn-on
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    IF spec-n = 104
+        PERFORM turn-tag-lights-off
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    *> Harbour turboLower: walk 36 and 98.
+    IF spec-n = 36 OR spec-n = 98
         PERFORM start-lower
         MOVE 0 TO ln-spec(li)
     END-IF
@@ -456,9 +829,35 @@ cross-hit.
         PERFORM start-stair
         MOVE 0 TO ln-spec(li)
     END-IF
+    *> W1 22: raiseToNearestAndChange. E1M5 line 272 lifts the nukage
+    *> platform (tag 6) and swaps its flat for the front sector's.
+    IF spec-n = 22
+        PERFORM raise-nearest
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    *> WR 91: raiseFloor to the lowest surrounding ceiling. The line stays,
+    *> so a room that turbo-lowered can be lifted back on a later cross.
+    IF spec-n = 91
+        PERFORM raise-low-ceil
+    END-IF
+    *> W1 2 opens a door and stays. WR 90 opens, waits, then closes
+    *> and can be crossed again. E1M5 line 561 (tag 8) is the door
+    *> west of the rocket hall; the special stays on the line.
+    IF spec-n = 2 OR spec-n = 90
+        IF spec-n = 2
+            MOVE 3 TO dtype
+        ELSE
+            MOVE 0 TO dtype
+        END-IF
+        PERFORM walk-tag-door
+        IF spec-n = 2
+            MOVE 0 TO ln-spec(li)
+        END-IF
+    END-IF
     IF spec-n = 10 OR spec-n = 88 OR spec-n = 121
         OR spec-n = 120
-        MOVE 65536 TO spd-h
+        *> downWaitUpStay is PLATSPEED*4; blaze is *8.
+        MOVE 262144 TO spd-h
         IF spec-n = 121 OR spec-n = 120
             MOVE 524288 TO spd-h
         END-IF
@@ -475,6 +874,92 @@ cross-hit.
             END-IF
         END-IF
     END-IF
+    .
+
+light-turn-on.
+    *> Harbour EV_LightTurnOn: bright=0 → max surrounding light.
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li)
+            IF light-bright = 0
+                PERFORM max-surround-light
+                MOVE light-min TO sec-flight(sec-slot)
+            ELSE
+                MOVE light-bright TO sec-flight(sec-slot)
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+turn-tag-lights-off.
+    *> Harbour EV_TurnTagLightsOff: min surrounding light.
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li)
+            MOVE sec-flight(sec-slot) TO light-min
+            PERFORM min-surround-light
+            MOVE light-min TO sec-flight(sec-slot)
+        END-IF
+    END-PERFORM
+    .
+
+max-surround-light.
+    MOVE sec-flight(sec-slot) TO light-min
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > n-line
+        CALL "bit_and" USING BY VALUE ln-flags(step-n) BY VALUE 4
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            COMPUTE fs = ln-front(step-n) + 1
+            IF fs = sec-slot AND ln-back(step-n) >= 0
+                COMPUTE bs = ln-back(step-n) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-flight(bs) > light-min
+                        MOVE sec-flight(bs) TO light-min
+                    END-IF
+                END-IF
+            END-IF
+            COMPUTE bs = ln-back(step-n) + 1
+            IF ln-back(step-n) >= 0 AND bs = sec-slot
+                COMPUTE bs = ln-front(step-n) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-flight(bs) > light-min
+                        MOVE sec-flight(bs) TO light-min
+                    END-IF
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+min-surround-light.
+    PERFORM VARYING step-n FROM 1 BY 1 UNTIL step-n > n-line
+        CALL "bit_and" USING BY VALUE ln-flags(step-n) BY VALUE 4
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            COMPUTE fs = ln-front(step-n) + 1
+            IF fs = sec-slot AND ln-back(step-n) >= 0
+                COMPUTE bs = ln-back(step-n) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-flight(bs) < light-min
+                        MOVE sec-flight(bs) TO light-min
+                    END-IF
+                END-IF
+            END-IF
+            COMPUTE bs = ln-back(step-n) + 1
+            IF ln-back(step-n) >= 0 AND bs = sec-slot
+                COMPUTE bs = ln-front(step-n) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-flight(bs) < light-min
+                        MOVE sec-flight(bs) TO light-min
+                    END-IF
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
     .
 
 need-key.
@@ -695,6 +1180,100 @@ claim-slot.
         IF fl-on(hj) = 0
             MOVE hj TO fl-i
             EXIT PERFORM
+        END-IF
+    END-PERFORM
+    .
+
+mon-crossed.
+    *> P_CrossSpecialLine for a monster. side is the side they came from.
+    MOVE ln-spec(li) TO spec-n
+    IF spec-n = 10 OR spec-n = 88
+        MOVE 262144 TO spd-h
+        PERFORM start-plat
+        IF spec-n = 10
+            MOVE 0 TO ln-spec(li)
+        END-IF
+    END-IF
+    IF spec-n = 4
+        PERFORM mon-tag-door
+    END-IF
+    IF spec-n = 39 OR spec-n = 97 OR spec-n = 125 OR spec-n = 126
+        IF cross-side = 0
+            PERFORM mon-go-teleport
+            IF tel-done = 1 AND (spec-n = 39 OR spec-n = 125)
+                MOVE 0 TO ln-spec(li)
+            END-IF
+        END-IF
+    END-IF
+    .
+
+walk-tag-door.
+    *> EV_DoDoor for a walk line. dtype is already 0 (open-wait-close)
+    *> or 3 (open and stay). A sector that is already moving is skipped,
+    *> matching vanilla specialdata.
+    MOVE 0 TO got-sw
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li) AND sec-door(sec-slot) = 0
+            PERFORM spawn-door
+            MOVE 1 TO got-sw
+        END-IF
+    END-PERFORM
+    .
+
+mon-tag-door.
+    *> EV_DoDoor vld_normal. A sector that is already a door is left alone.
+    MOVE 0 TO dtype
+    MOVE 0 TO got-sw
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING sec-slot FROM 1 BY 1 UNTIL sec-slot > n-sector
+        IF sec-tag(sec-slot) = ln-tag(li) AND sec-door(sec-slot) = 0
+            PERFORM spawn-door
+            MOVE 1 TO got-sw
+        END-IF
+    END-PERFORM
+    IF got-sw = 1
+        MOVE 0 TO ln-spec(li)
+    END-IF
+    .
+
+mon-go-teleport.
+    *> EV_Teleport of the monster. Two fog spawns each draw P_Random.
+    MOVE 0 TO tel-done
+    IF ln-tag(li) = 0
+        EXIT PARAGRAPH
+    END-IF
+    IF cross-who < 1 OR cross-who > n-mobj
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING mi FROM 1 BY 1 UNTIL mi > n-thing
+        IF th-kind(mi) = 14 AND tel-done = 0
+            CALL "fixed_from_i16" USING BY VALUE th-x(mi)
+                RETURNING try-x
+            CALL "fixed_from_i16" USING BY VALUE th-y(mi)
+                RETURNING try-y
+            PERFORM sector-at
+            IF sec-slot >= 1 AND sec-slot <= n-sector
+                AND sec-tag(sec-slot) = ln-tag(li)
+                MOVE try-x TO mo-x(cross-who)
+                MOVE try-y TO mo-y(cross-who)
+                CALL "angle_from_deg" USING BY VALUE th-ang(mi)
+                    RETURNING mo-ang(cross-who)
+                MOVE 0 TO mo-mx(cross-who)
+                MOVE 0 TO mo-my(cross-who)
+                MOVE 0 TO mo-mz(cross-who)
+                MOVE sec-floor-h(sec-slot) TO mo-z(cross-who)
+                MOVE 1 TO tel-done
+                MOVE "telept" TO snd-name
+                CALL "sfx-play" USING snd-name
+                CALL "p-random" USING rnd-fog
+                CALL "p-random" USING rnd-fog
+                MOVE 1 TO moved-out
+            END-IF
         END-IF
     END-PERFORM
     .
@@ -924,9 +1503,36 @@ try-spec.
         END-IF
         EXIT PARAGRAPH
     END-IF
+    *> Harbour switch turboLower 70/71.
+    IF spec-n = 70 OR spec-n = 71
+        PERFORM start-lower
+        IF got-sw = 1
+            PERFORM flip-switch
+            IF spec-n = 71
+                MOVE 0 TO ln-spec(li)
+            END-IF
+            MOVE 1 TO moved-out
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    *> Harbour S1/SR light 138/139.
+    IF spec-n = 138
+        MOVE 255 TO light-bright
+        PERFORM light-turn-on
+        PERFORM flip-switch
+        MOVE 1 TO moved-out
+        EXIT PARAGRAPH
+    END-IF
+    IF spec-n = 139
+        MOVE 35 TO light-bright
+        PERFORM light-turn-on
+        PERFORM flip-switch
+        MOVE 1 TO moved-out
+        EXIT PARAGRAPH
+    END-IF
     IF spec-n = 21 OR spec-n = 62 OR spec-n = 120
         OR spec-n = 122
-        MOVE 65536 TO spd-h
+        MOVE 262144 TO spd-h
         IF spec-n = 120 OR spec-n = 122
             MOVE 524288 TO spd-h
         END-IF

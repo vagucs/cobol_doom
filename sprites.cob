@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -220,6 +220,15 @@ COPY "playstate.cpy".
 01 sec-slot BINARY-LONG.
 01 step-n BINARY-LONG.
 01 tmp BINARY-LONG.
+01 rnd-n BINARY-LONG.
+01 spawn-tics BINARY-LONG.
+01 q-n BINARY-LONG.
+01 rem-n BINARY-LONG.
+01 spec-n BINARY-LONG.
+01 light-min BINARY-LONG.
+01 fs BINARY-LONG.
+01 bs BINARY-LONG.
+01 li BINARY-LONG.
 
 PROCEDURE DIVISION.
     IF spr-once = 1
@@ -232,42 +241,178 @@ PROCEDURE DIVISION.
     MOVE 0 TO ply-kills
     MOVE 0 TO ply-items
     MOVE 0 TO ply-secs
+    MOVE 0 TO n-light
     PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-sector
         IF sec-special(i) = 9
             ADD 1 TO map-secs
         END-IF
     END-PERFORM
+    *> Harbour/Python: walk things in order; type 1 consumes lastlook RNG.
     PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-thing
         MOVE th-kind(i) TO kind-n
         MOVE th-opt(i) TO opt-n
-        IF kind-n = 11 OR kind-n = 1 OR kind-n = 2
-            OR kind-n = 3 OR kind-n = 4
-            CONTINUE
-        ELSE
-            MOVE 2 TO tmp
-            IF ply-skill <= 1
-                MOVE 1 TO tmp
+        IF kind-n = 11 OR kind-n = 2 OR kind-n = 3 OR kind-n = 4
+            EXIT PERFORM CYCLE
+        END-IF
+        IF kind-n = 1
+            CALL "p-random" USING rnd-n
+            EXIT PERFORM CYCLE
+        END-IF
+        MOVE 2 TO tmp
+        IF ply-skill <= 1
+            MOVE 1 TO tmp
+        END-IF
+        IF ply-skill >= 3
+            MOVE 4 TO tmp
+        END-IF
+        CALL "bit_and" USING BY VALUE opt-n BY VALUE tmp
+            RETURNING bit-n
+        IF bit-n = 0
+            EXIT PERFORM CYCLE
+        END-IF
+        CALL "bit_and" USING BY VALUE opt-n BY VALUE 16
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            EXIT PERFORM CYCLE
+        END-IF
+        PERFORM place-one
+    END-PERFORM
+    *> P_SpawnSpecials light RNG (after map things).
+    PERFORM spawn-light-rng
+    MOVE 1 TO spr-once
+    GOBACK.
+
+spawn-light-rng.
+    *> P_SpawnSpecials after map things (Harbour p_spec / Python specials).
+    *> Flash(1) and unsynced strobe(2/3/4) each consume one P_Random.
+    *> Synced strobe(12/13) does not. Special 4 keeps damage after strobe.
+    PERFORM VARYING i FROM 1 BY 1 UNTIL i > n-sector
+        MOVE sec-special(i) TO spec-n
+        EVALUATE TRUE
+            WHEN spec-n = 1
+                PERFORM spawn-flash
+            WHEN spec-n = 2
+                MOVE 15 TO rem-n
+                PERFORM spawn-strobe
+            WHEN spec-n = 3
+                MOVE 35 TO rem-n
+                PERFORM spawn-strobe
+            WHEN spec-n = 4
+                MOVE 15 TO rem-n
+                PERFORM spawn-strobe
+                MOVE 4 TO sec-special(i)
+            WHEN spec-n = 8 OR spec-n = 17
+                MOVE 0 TO sec-special(i)
+            WHEN spec-n = 12
+                MOVE 35 TO rem-n
+                MOVE 1 TO q-n
+                PERFORM spawn-strobe-sync
+            WHEN spec-n = 13
+                MOVE 15 TO rem-n
+                MOVE 1 TO q-n
+                PERFORM spawn-strobe-sync
+        END-EVALUATE
+    END-PERFORM
+    .
+
+spawn-flash.
+    *> P_SpawnLightFlash: count = (P_Random & 64) + 1.
+    IF n-light >= 64
+        CALL "p-random" USING rnd-n
+        MOVE 0 TO sec-special(i)
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO n-light
+    MOVE i TO lt-sec(n-light)
+    MOVE 1 TO lt-kind(n-light)
+    MOVE sec-flight(i) TO lt-max(n-light)
+    MOVE i TO sec-slot
+    MOVE sec-flight(i) TO light-min
+    PERFORM min-surround-light
+    MOVE light-min TO lt-min(n-light)
+    MOVE 64 TO lt-maxt(n-light)
+    MOVE 7 TO lt-mint(n-light)
+    CALL "p-random" USING rnd-n
+    CALL "bit_and" USING BY VALUE rnd-n BY VALUE 64 RETURNING rem-n
+    COMPUTE lt-count(n-light) = rem-n + 1
+    MOVE 0 TO sec-special(i)
+    .
+
+spawn-strobe.
+    *> Unsynced strobe: count = (P_Random & 7) + 1. rem-n = darktime.
+    MOVE 0 TO q-n
+    PERFORM spawn-strobe-body
+    .
+
+spawn-strobe-sync.
+    *> Synced strobe: count = 1, no P_Random. rem-n = darktime.
+    PERFORM spawn-strobe-body
+    .
+
+spawn-strobe-body.
+    *> rem-n holds darktime (FASTDARK=15 / SLOWDARK=35) on entry.
+    MOVE rem-n TO spawn-tics
+    IF n-light >= 64
+        IF q-n = 0
+            CALL "p-random" USING rnd-n
+        END-IF
+        IF spec-n NOT = 4
+            MOVE 0 TO sec-special(i)
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO n-light
+    MOVE i TO lt-sec(n-light)
+    MOVE 2 TO lt-kind(n-light)
+    MOVE sec-flight(i) TO lt-max(n-light)
+    MOVE i TO sec-slot
+    MOVE sec-flight(i) TO light-min
+    PERFORM min-surround-light
+    IF light-min = sec-flight(i)
+        MOVE 0 TO light-min
+    END-IF
+    MOVE light-min TO lt-min(n-light)
+    MOVE spawn-tics TO lt-dark(n-light)
+    MOVE 5 TO lt-brit(n-light)
+    IF q-n = 0
+        CALL "p-random" USING rnd-n
+        CALL "bit_and" USING BY VALUE rnd-n BY VALUE 7 RETURNING rem-n
+        COMPUTE lt-count(n-light) = rem-n + 1
+    ELSE
+        MOVE 1 TO lt-count(n-light)
+    END-IF
+    IF spec-n NOT = 4
+        MOVE 0 TO sec-special(i)
+    END-IF
+    .
+
+min-surround-light.
+    *> P_FindMinSurroundingLight for flash/strobe spawn.
+    PERFORM VARYING j FROM 1 BY 1 UNTIL j > n-line
+        CALL "bit_and" USING BY VALUE ln-flags(j) BY VALUE 4
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            COMPUTE fs = ln-front(j) + 1
+            IF fs = sec-slot AND ln-back(j) >= 0
+                COMPUTE bs = ln-back(j) + 1
+                IF bs >= 1 AND bs <= n-sector
+                    IF sec-flight(bs) < light-min
+                        MOVE sec-flight(bs) TO light-min
+                    END-IF
+                END-IF
             END-IF
-            IF ply-skill >= 3
-                MOVE 4 TO tmp
-            END-IF
-            CALL "bit_and" USING BY VALUE opt-n BY VALUE tmp
-                RETURNING bit-n
-            IF bit-n = 0
-                CONTINUE
-            ELSE
-                CALL "bit_and" USING BY VALUE opt-n BY VALUE 16
-                    RETURNING bit-n
-                IF bit-n NOT = 0
-                    CONTINUE
-                ELSE
-                    PERFORM place-one
+            COMPUTE bs = ln-back(j) + 1
+            IF ln-back(j) >= 0 AND bs = sec-slot
+                COMPUTE fs = ln-front(j) + 1
+                IF fs >= 1 AND fs <= n-sector
+                    IF sec-flight(fs) < light-min
+                        MOVE sec-flight(fs) TO light-min
+                    END-IF
                 END-IF
             END-IF
         END-IF
     END-PERFORM
-    MOVE 1 TO spr-once
-    GOBACK.
+    .
 
 place-one.
     IF n-mobj >= 768
@@ -319,6 +464,58 @@ place-one.
     ELSE
         MOVE sec-floor-h(sec-slot) TO mo-z(n-mobj)
     END-IF
+    *> spawnMobj lastlook + spawnMapThings tics jitter (P_Random stream).
+    CALL "p-random" USING rnd-n
+    CALL "bit_and" USING BY VALUE rnd-n BY VALUE 3 RETURNING rem-n
+    MOVE rem-n TO mo-look(n-mobj)
+    PERFORM spawn-tics-of
+    IF spawn-tics > 0
+        CALL "p-random" USING rnd-n
+        DIVIDE rnd-n BY spawn-tics GIVING q-n REMAINDER rem-n
+        COMPUTE mo-tic(n-mobj) = rem-n + 1
+    END-IF
+    .
+
+spawn-tics-of.
+    *> Spawn-state tics from info (only >0 consume a P_Random).
+    *> E1M5 gap vs Python was ARM1/ARM2/BKEY/YKEY (6 rolls; ply-rnd wraps 256).
+    MOVE 0 TO spawn-tics
+    CALL "bit_and" USING BY VALUE flags-n BY VALUE 4194304
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        MOVE 10 TO spawn-tics
+    END-IF
+    IF mo-name(n-mobj) = "SKUL"
+        MOVE 10 TO spawn-tics
+    END-IF
+    IF mo-name(n-mobj) = "BAR1"
+        MOVE 6 TO spawn-tics
+    END-IF
+    *> Powerups/armor with spawnstate tics>0 (SUIT is -1 — no jitter).
+    IF mo-name(n-mobj) = "BON1" OR mo-name(n-mobj) = "BON2"
+        OR mo-name(n-mobj) = "SOUL" OR mo-name(n-mobj) = "MEGA"
+        OR mo-name(n-mobj) = "PINV" OR mo-name(n-mobj) = "PSTR"
+        OR mo-name(n-mobj) = "PINS"
+        OR mo-name(n-mobj) = "PMAP" OR mo-name(n-mobj) = "PVIS"
+        OR mo-name(n-mobj) = "ARM1" OR mo-name(n-mobj) = "ARM2"
+        MOVE 6 TO spawn-tics
+    END-IF
+    *> Keys: spawnstate tics=10.
+    IF mo-name(n-mobj) = "BKEY" OR mo-name(n-mobj) = "RKEY"
+        OR mo-name(n-mobj) = "YKEY" OR mo-name(n-mobj) = "BSKU"
+        OR mo-name(n-mobj) = "RSKU" OR mo-name(n-mobj) = "YSKU"
+        MOVE 10 TO spawn-tics
+    END-IF
+    IF mo-name(n-mobj) = "SMIT" OR mo-name(n-mobj) = "TRE1"
+        OR mo-name(n-mobj) = "TRE2" OR mo-name(n-mobj) = "SMBT"
+        OR mo-name(n-mobj) = "SMGT" OR mo-name(n-mobj) = "SMRT"
+        MOVE 0 TO spawn-tics
+    END-IF
+    IF mo-name(n-mobj) = "FCAN" OR mo-name(n-mobj) = "FSKU"
+        OR mo-name(n-mobj) = "COLU" OR mo-name(n-mobj) = "TLMP"
+        OR mo-name(n-mobj) = "TLP2"
+        MOVE 4 TO spawn-tics
+    END-IF
     .
 
 set-hp.
@@ -329,9 +526,18 @@ set-hp.
     MOVE 0 TO mo-seq(n-mobj)
     MOVE 0 TO mo-step(n-mobj)
     MOVE 0 TO mo-ai(n-mobj)
-    MOVE 8 TO mo-wait(n-mobj)
-    MOVE 8 TO mo-dir(n-mobj)
+    MOVE 0 TO mo-wait(n-mobj)
+    *> Harbour: movedir spawn default 0 (DI_NODIR=8 only after AI fails).
+    MOVE 0 TO mo-dir(n-mobj)
     MOVE 0 TO mo-count(n-mobj)
+    *> info.reactiontime (sk_nightmare clears this in spawnMobj).
+    MOVE 8 TO mo-react(n-mobj)
+    IF ply-skill = 4
+        MOVE 0 TO mo-react(n-mobj)
+    END-IF
+    MOVE 0 TO mo-look(n-mobj)
+    MOVE 0 TO mo-tgt(n-mobj)
+    MOVE 0 TO mo-thrs(n-mobj)
     MOVE 0 TO mo-mx(n-mobj)
     MOVE 0 TO mo-my(n-mobj)
     MOVE 0 TO mo-mz(n-mobj)
@@ -451,6 +657,55 @@ locate-floor.
     .
 
 END PROGRAM spr-spawn.
+
+IDENTIFICATION DIVISION.
+PROGRAM-ID. light-tic.
+
+DATA DIVISION.
+WORKING-STORAGE SECTION.
+COPY "mapstate.cpy".
+COPY "playstate.cpy".
+01 li BINARY-LONG.
+01 sec-i BINARY-LONG.
+01 rnd-n BINARY-LONG.
+01 rem-n BINARY-LONG.
+
+PROCEDURE DIVISION.
+    PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-light
+        SUBTRACT 1 FROM lt-count(li)
+        IF lt-count(li) = 0
+            MOVE lt-sec(li) TO sec-i
+            IF lt-kind(li) = 1
+                *> T_LightFlash — each phase re-rolls with P_Random.
+                IF sec-flight(sec-i) = lt-max(li)
+                    MOVE lt-min(li) TO sec-flight(sec-i)
+                    CALL "p-random" USING rnd-n
+                    CALL "bit_and" USING BY VALUE rnd-n
+                        BY VALUE lt-mint(li) RETURNING rem-n
+                    COMPUTE lt-count(li) = rem-n + 1
+                ELSE
+                    MOVE lt-max(li) TO sec-flight(sec-i)
+                    CALL "p-random" USING rnd-n
+                    CALL "bit_and" USING BY VALUE rnd-n
+                        BY VALUE lt-maxt(li) RETURNING rem-n
+                    COMPUTE lt-count(li) = rem-n + 1
+                END-IF
+            END-IF
+            IF lt-kind(li) = 2
+                *> T_StrobeFlash — fixed bright/dark times, no RNG.
+                IF sec-flight(sec-i) = lt-min(li)
+                    MOVE lt-max(li) TO sec-flight(sec-i)
+                    MOVE lt-brit(li) TO lt-count(li)
+                ELSE
+                    MOVE lt-min(li) TO sec-flight(sec-i)
+                    MOVE lt-dark(li) TO lt-count(li)
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
+    GOBACK.
+
+END PROGRAM light-tic.
 
 IDENTIFICATION DIVISION.
 PROGRAM-ID. spr-lookup.

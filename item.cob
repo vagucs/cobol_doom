@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -31,7 +31,9 @@ COPY "playstate.cpy".
 01 pack-n BINARY-LONG.
 01 unit-n BINARY-LONG.
 01 cur-n BINARY-LONG.
+01 old-n BINARY-LONG.
 01 max-n BINARY-LONG.
+01 dz BINARY-LONG.
 
 PROCEDURE DIVISION.
     PERFORM main-item
@@ -51,6 +53,12 @@ main-item.
     .
 
 try-one.
+    *> P_TouchSpecialThing: reject if too high/low vs toucher.
+    CALL "sub_i32" USING BY VALUE mo-z(mo-i) BY VALUE ply-z
+        RETURNING dz
+    IF dz > ply-h OR dz < -524288
+        EXIT PARAGRAPH
+    END-IF
     CALL "add_i32" USING BY VALUE mo-rad(mo-i) BY VALUE ply-rad
         RETURNING dist-n
     CALL "sub_i32" USING BY VALUE mo-x(mo-i) BY VALUE ply-x
@@ -203,61 +211,99 @@ apply-item.
         MOVE 1 TO ply-k5
         MOVE 1 TO took
     END-IF
+    *> P_GiveWeapon: placed = 2 clips; MF_DROPPED = 1; pending só se arma nova.
     IF item-n = "SHOT" OR item-n = "SGN2"
-        MOVE 1 TO ply-sg
         MOVE 2 TO which-n
-        MOVE 1 TO pack-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
         PERFORM give-pack
-        MOVE 1 TO took
-        IF ply-weap NOT = 3
-            MOVE 3 TO ply-pend
+        IF ply-sg = 0
+            MOVE 1 TO ply-sg
+            MOVE 1 TO took
+            IF ply-weap NOT = 3
+                MOVE 3 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "MGUN"
-        MOVE 1 TO ply-cg
         MOVE 1 TO which-n
-        MOVE 1 TO pack-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
         PERFORM give-pack
-        MOVE 1 TO took
-        IF ply-weap NOT = 4
-            MOVE 4 TO ply-pend
+        IF ply-cg = 0
+            MOVE 1 TO ply-cg
+            MOVE 1 TO took
+            IF ply-weap NOT = 4
+                MOVE 4 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "LAUN"
-        MOVE 1 TO ply-rl
         MOVE 4 TO which-n
-        MOVE 1 TO pack-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
         PERFORM give-pack
-        MOVE 1 TO took
-        IF ply-weap NOT = 5
-            MOVE 5 TO ply-pend
+        IF ply-rl = 0
+            MOVE 1 TO ply-rl
+            MOVE 1 TO took
+            IF ply-weap NOT = 5
+                MOVE 5 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "PLAS"
-        MOVE 1 TO ply-pg
         MOVE 3 TO which-n
-        MOVE 1 TO pack-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
         PERFORM give-pack
-        MOVE 1 TO took
-        IF ply-weap NOT = 6
-            MOVE 6 TO ply-pend
+        IF ply-pg = 0
+            MOVE 1 TO ply-pg
+            MOVE 1 TO took
+            IF ply-weap NOT = 6
+                MOVE 6 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "BFUG"
-        MOVE 1 TO ply-bf
         MOVE 3 TO which-n
-        MOVE 1 TO pack-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
         PERFORM give-pack
-        MOVE 1 TO took
-        IF ply-weap NOT = 7
-            MOVE 7 TO ply-pend
+        IF ply-bf = 0
+            MOVE 1 TO ply-bf
+            MOVE 1 TO took
+            IF ply-weap NOT = 7
+                MOVE 7 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "CSAW"
-        MOVE 1 TO ply-saw
-        MOVE 1 TO took
-        IF ply-weap NOT = 8
-            MOVE 8 TO ply-pend
+        IF ply-saw = 0
+            MOVE 1 TO ply-saw
+            MOVE 1 TO took
+            IF ply-weap NOT = 8
+                MOVE 8 TO ply-pend
+            END-IF
         END-IF
     END-IF
     IF item-n = "PINV"
@@ -339,6 +385,7 @@ give-pack.
     IF cur-n >= max-n
         EXIT PARAGRAPH
     END-IF
+    MOVE cur-n TO old-n
     MULTIPLY pack-n BY unit-n GIVING add-n
     ADD add-n TO cur-n
     IF cur-n > max-n
@@ -357,6 +404,35 @@ give-pack.
         MOVE cur-n TO ply-misl
     END-IF
     MOVE 1 TO took
+    *> P_GiveAmmo: empty pocket selects a gun that uses this ammo.
+    IF old-n = 0
+        PERFORM empty-prefer
+    END-IF
+    .
+
+empty-prefer.
+    IF which-n = 1 AND ply-weap = 1
+        IF ply-cg = 1
+            MOVE 4 TO ply-pend
+        ELSE
+            MOVE 2 TO ply-pend
+        END-IF
+    END-IF
+    IF which-n = 2
+        IF (ply-weap = 1 OR ply-weap = 2) AND ply-sg = 1
+            MOVE 3 TO ply-pend
+        END-IF
+    END-IF
+    IF which-n = 3
+        IF (ply-weap = 1 OR ply-weap = 2) AND ply-pg = 1
+            MOVE 6 TO ply-pend
+        END-IF
+    END-IF
+    IF which-n = 4
+        IF ply-weap = 1 AND ply-rl = 1
+            MOVE 5 TO ply-pend
+        END-IF
+    END-IF
     .
 
 take-pack.

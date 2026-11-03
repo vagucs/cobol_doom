@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -86,6 +86,9 @@ PROCEDURE DIVISION USING fb mode-n pick-n skull-n
         IF mode-n = 2
             PERFORM draw-options
         END-IF
+        IF mode-n = 11
+            PERFORM draw-sound
+        END-IF
         IF mode-n = 7
             PERFORM draw-episode
         END-IF
@@ -165,6 +168,10 @@ draw-options.
     MOVE 60 TO pen-x
     MOVE 133 TO pen-y
     PERFORM draw-thermo
+    MOVE "M_SVOL" TO lname
+    MOVE 60 TO pen-x
+    MOVE 149 TO pen-y
+    PERFORM draw-named
     IF skull-n = 0
         MOVE "M_SKULL1" TO lname
     ELSE
@@ -179,6 +186,47 @@ draw-options.
     END-IF
     IF pick-n = 2
         MOVE 112 TO pen-y
+    END-IF
+    IF pick-n = 3
+        MOVE 144 TO pen-y
+    END-IF
+    PERFORM draw-named
+    .
+
+draw-sound.
+    *> Harbour/python Sound Volume: SFX + Music thermos 0..15.
+    MOVE "M_SVOL" TO lname
+    MOVE 60 TO pen-x
+    MOVE 38 TO pen-y
+    PERFORM draw-named
+    MOVE "M_SFXVOL" TO lname
+    MOVE 80 TO pen-x
+    MOVE 64 TO pen-y
+    PERFORM draw-named
+    MOVE 16 TO wide-n
+    MOVE ply-sfxvol TO dot-n
+    MOVE 80 TO pen-x
+    MOVE 80 TO pen-y
+    PERFORM draw-thermo
+    MOVE "M_MUSVOL" TO lname
+    MOVE 80 TO pen-x
+    MOVE 112 TO pen-y
+    PERFORM draw-named
+    MOVE 16 TO wide-n
+    MOVE ply-musvol TO dot-n
+    MOVE 80 TO pen-x
+    MOVE 128 TO pen-y
+    PERFORM draw-thermo
+    IF skull-n = 0
+        MOVE "M_SKULL1" TO lname
+    ELSE
+        MOVE "M_SKULL2" TO lname
+    END-IF
+    MOVE 48 TO pen-x
+    IF pick-n = 0
+        MOVE 59 TO pen-y
+    ELSE
+        MOVE 107 TO pen-y
     END-IF
     PERFORM draw-named
     .

@@ -1,4 +1,4 @@
-/* DOOM generic portado do python_doom para COBOL com SDL2.
+/* DOOM generic portado do python_doom para COBOL com SDL3.
 
    Por Wagner Nunes da Silva
 
@@ -8,23 +8,21 @@
 
    www.vagucs.com.br
 
-   Ponte COBOL -> SDL2. Janela, textura, paleta e teclado.
+   Ponte COBOL -> SDL3. Janela, textura, paleta e teclado.
    O rato fica de fora. O motor do jogo nao entra aqui. */
 
-#define SDL_MAIN_HANDLED
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <stdlib.h>
 
 void audio_shutdown(void);
 
-static unsigned char key_down[SDL_NUM_SCANCODES];
+static unsigned char key_down[SDL_SCANCODE_COUNT];
 
 static void remember_key(const SDL_KeyboardEvent *key)
 {
-    if (key->keysym.scancode < SDL_NUM_SCANCODES)
-        key_down[key->keysym.scancode] =
-            key->type == SDL_KEYDOWN ? 1 : 0;
+    if (key->scancode < SDL_SCANCODE_COUNT)
+        key_down[key->scancode] = key->down ? 1 : 0;
 }
 
 static SDL_Window *window = NULL;
@@ -44,11 +42,11 @@ static void toggle_fullscreen(void)
         return;
     if (!fullscreen) {
         SDL_GetWindowSize(window, &win_w, &win_h);
-        if (SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0)
+        if (SDL_SetWindowFullscreen(window, true))
             fullscreen = 1;
         return;
     }
-    if (SDL_SetWindowFullscreen(window, 0) == 0) {
+    if (SDL_SetWindowFullscreen(window, false)) {
         fullscreen = 0;
         if (win_w > 0 && win_h > 0)
             SDL_SetWindowSize(window, win_w, win_h);
@@ -59,46 +57,42 @@ static void toggle_fullscreen(void)
 
 static void ignore_mouse(void)
 {
-    SDL_EventState(SDL_MOUSEMOTION, SDL_IGNORE);
-    SDL_EventState(SDL_MOUSEBUTTONDOWN, SDL_IGNORE);
-    SDL_EventState(SDL_MOUSEBUTTONUP, SDL_IGNORE);
-    SDL_EventState(SDL_MOUSEWHEEL, SDL_IGNORE);
-    SDL_ShowCursor(SDL_DISABLE);
+    SDL_SetEventEnabled(SDL_EVENT_MOUSE_MOTION, false);
+    SDL_SetEventEnabled(SDL_EVENT_MOUSE_BUTTON_DOWN, false);
+    SDL_SetEventEnabled(SDL_EVENT_MOUSE_BUTTON_UP, false);
+    SDL_SetEventEnabled(SDL_EVENT_MOUSE_WHEEL, false);
+    SDL_HideCursor();
 }
 
 int video_init(int w, int h, int scale, int vsync)
 {
-    Uint32 flags;
-
     if (w < 1 || h < 1)
         return 1;
     if (scale < 1)
         scale = 1;
     if (!vsync)
         SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS))
         return 2;
     sdl_up = 1;
     ignore_mouse();
-    window = SDL_CreateWindow("DOOM",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        w * scale, h * scale, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("DOOM", w * scale, h * scale, 0);
     if (window == NULL)
         return 3;
-    flags = SDL_RENDERER_ACCELERATED;
-    if (vsync)
-        flags |= SDL_RENDERER_PRESENTVSYNC;
-    renderer = SDL_CreateRenderer(window, -1, flags);
+    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED);
+    renderer = SDL_CreateRenderer(window, NULL);
     if (renderer == NULL)
-        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        renderer = SDL_CreateRenderer(window, "software");
     if (renderer == NULL)
         return 4;
-    if (!vsync)
-        SDL_RenderSetVSync(renderer, 0);
+    SDL_SetRenderVSync(renderer, vsync ? 1 : 0);
+    SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_NEAREST);
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, w, h);
     if (texture == NULL)
         return 5;
+    SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
     pixels = (Uint32 *)calloc((size_t)w * (size_t)h, sizeof(Uint32));
     if (pixels == NULL)
         return 6;
@@ -168,13 +162,16 @@ int video_set_scale(int scale)
     return 0;
 }
 
+extern void audio_pump(void);
+
 void video_present(void)
 {
+    audio_pump();
     if (renderer == NULL || texture == NULL || pixels == NULL)
         return;
     SDL_UpdateTexture(texture, NULL, pixels, tex_w * (int)sizeof(Uint32));
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_RenderTexture(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
 }
 
@@ -187,24 +184,24 @@ int video_ms(void)
 
 int video_key(int sym)
 {
-    const Uint8 *state;
+    const bool *state;
     SDL_Scancode code;
     SDL_Keymod mods;
 
     if (!sdl_up)
         return 0;
     mods = SDL_GetModState();
-    if (sym == 1073742048 && (mods & KMOD_LCTRL))
+    if (sym == 1073742048 && (mods & SDL_KMOD_LCTRL))
         return 1;
-    if (sym == 1073742052 && (mods & KMOD_RCTRL))
+    if (sym == 1073742052 && (mods & SDL_KMOD_RCTRL))
         return 1;
     if (sym == 1073742048)
         code = SDL_SCANCODE_LCTRL;
     else if (sym == 1073742052)
         code = SDL_SCANCODE_RCTRL;
     else
-        code = SDL_GetScancodeFromKey((SDL_Keycode)sym);
-    if (code == SDL_SCANCODE_UNKNOWN || code >= SDL_NUM_SCANCODES)
+        code = SDL_GetScancodeFromKey((SDL_Keycode)sym, NULL);
+    if (code == SDL_SCANCODE_UNKNOWN || code >= SDL_SCANCODE_COUNT)
         return 0;
     if (key_down[code])
         return 1;
@@ -221,19 +218,19 @@ int video_poll(void)
 
     found = 0;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT)
+        if (event.type == SDL_EVENT_QUIT)
             return -1;
-        if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)
+        if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
             remember_key(&event.key);
-        if (event.type == SDL_KEYDOWN && !event.key.repeat
-            && (event.key.keysym.sym == SDLK_RETURN
-                || event.key.keysym.sym == SDLK_KP_ENTER)
-            && (event.key.keysym.mod & KMOD_ALT)) {
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat
+            && (event.key.key == SDLK_RETURN
+                || event.key.key == SDLK_KP_ENTER)
+            && (event.key.mod & SDL_KMOD_ALT)) {
             toggle_fullscreen();
             continue;
         }
-        if (found == 0 && event.type == SDL_KEYDOWN && !event.key.repeat)
-            found = (int)event.key.keysym.sym;
+        if (found == 0 && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)
+            found = (int)event.key.key;
     }
     return found;
 }

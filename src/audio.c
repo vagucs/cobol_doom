@@ -1,4 +1,4 @@
-/* DOOM generic portado do python_doom para COBOL com SDL2.
+/* DOOM generic portado do python_doom para COBOL com SDL3.
 
    Por Wagner Nunes da Silva
 
@@ -11,8 +11,7 @@
    Ponte de audio. Abre o dispositivo, decodifica o lump DS e mistura
    ate 8 vozes. Qual som toca, e quando, fica no COBOL. */
 
-#define SDL_MAIN_HANDLED
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -40,9 +39,12 @@ typedef struct {
     int on;
 } voice_t;
 
-static SDL_AudioDeviceID dev = 0;
+static SDL_AudioStream *stream = NULL;
 static clip_t cache[CACHE];
 static voice_t voices[VOICES];
+static int sfx_volume = 8;
+static int music_volume = 8;
+static int music_on;
 
 static int16_t *decode_dmx(const unsigned char *data, int len, int *out_n)
 {
@@ -122,18 +124,12 @@ static clip_t *take_clip(const unsigned char *data, int len, const char *name)
     return &cache[free_i];
 }
 
-static void mix_cb(void *ud, Uint8 *stream, int len)
+static void mix_frames(int16_t *out, int frames)
 {
-    int frames;
     int i;
     int v;
     int acc;
-    int16_t *out;
 
-    (void)ud;
-    frames = len / 2;
-    out = (int16_t *)stream;
-    memset(stream, 0, (size_t)len);
     for (i = 0; i < frames; i++) {
         acc = 0;
         for (v = 0; v < VOICES; v++) {
@@ -143,7 +139,7 @@ static void mix_cb(void *ud, Uint8 *stream, int len)
                 voices[v].on = 0;
                 continue;
             }
-            acc += ((int)voices[v].clip->pcm[voices[v].pos++]) * 8 / 15;
+            acc += ((int)voices[v].clip->pcm[voices[v].pos++]) * sfx_volume / 15;
         }
         if (acc > 32767)
             acc = 32767;
@@ -153,24 +149,63 @@ static void mix_cb(void *ud, Uint8 *stream, int len)
     }
 }
 
+/* PHP queues from the game thread. The device callback on this SDL3
+ * build never reached the speakers; music still played because it is MCI. */
+void audio_pump(void)
+{
+    int16_t buf[1024];
+    int queued;
+    int bytes;
+    int frames;
+    int v;
+    int any;
+
+    if (stream == NULL)
+        return;
+    any = 0;
+    for (v = 0; v < VOICES; v++) {
+        if (voices[v].on) {
+            any = 1;
+            break;
+        }
+    }
+    if (!any)
+        return;
+    queued = SDL_GetAudioStreamQueued(stream);
+    /* 16-bit mono, three periods at 11025 Hz (~139 ms). */
+    if (queued >= 512 * 2 * 3)
+        return;
+    bytes = 512 * 2 * 3 - queued;
+    if (bytes > (int)sizeof(buf))
+        bytes = (int)sizeof(buf);
+    bytes &= ~1;
+    frames = bytes / 2;
+    if (frames < 1)
+        return;
+    SDL_LockAudioStream(stream);
+    mix_frames(buf, frames);
+    SDL_UnlockAudioStream(stream);
+    SDL_PutAudioStreamData(stream, buf, bytes);
+}
+
 int audio_init(void)
 {
     SDL_AudioSpec want;
 
-    if (dev != 0)
+    if (stream != NULL)
         return 0;
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
         return 1;
     SDL_zero(want);
     want.freq = 11025;
-    want.format = AUDIO_S16SYS;
+    want.format = SDL_AUDIO_S16;
     want.channels = 1;
-    want.samples = 1024;
-    want.callback = mix_cb;
-    dev = SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
-    if (dev == 0)
+    stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+        &want, NULL, NULL);
+    if (stream == NULL)
         return 1;
-    SDL_PauseAudioDevice(dev, 0);
+    if (!SDL_ResumeAudioStreamDevice(stream))
+        return 1;
     return 0;
 }
 
@@ -179,9 +214,9 @@ void audio_shutdown(void)
     int i;
 
     music_stop();
-    if (dev != 0) {
-        SDL_CloseAudioDevice(dev);
-        dev = 0;
+    if (stream != NULL) {
+        SDL_DestroyAudioStream(stream);
+        stream = NULL;
     }
     for (i = 0; i < CACHE; i++) {
         free(cache[i].pcm);
@@ -202,12 +237,12 @@ int audio_play(unsigned char *data, int len, char *name)
     int left;
     int best_left;
 
-    if (dev == 0 || data == NULL || name == NULL || len < 16)
+    if (stream == NULL || data == NULL || name == NULL || len < 16)
         return 0;
-    SDL_LockAudioDevice(dev);
+    SDL_LockAudioStream(stream);
     clip = take_clip(data, len, name);
     if (clip == NULL) {
-        SDL_UnlockAudioDevice(dev);
+        SDL_UnlockAudioStream(stream);
         return 0;
     }
     slot = -1;
@@ -231,7 +266,8 @@ int audio_play(unsigned char *data, int len, char *name)
     voices[slot].clip = clip;
     voices[slot].pos = 0;
     voices[slot].on = 1;
-    SDL_UnlockAudioDevice(dev);
+    SDL_UnlockAudioStream(stream);
+    audio_pump();
     return 0;
 }
 
@@ -246,8 +282,51 @@ static int velocities[16];
 static int channel_map[16];
 static char music_path[MAX_PATH];
 static char music_name[8];
-static int music_on;
 static int music_loop;
+
+static void music_apply_volume(void)
+{
+    char cmd[64];
+    int v;
+
+    v = (music_volume * 1000) / 15;
+    if (v < 0)
+        v = 0;
+    if (v > 1000)
+        v = 1000;
+    snprintf(cmd, sizeof(cmd), "setaudio doommus volume to %d", v);
+    mciSendStringA(cmd, NULL, 0, NULL);
+}
+
+void audio_set_sfx_volume(int vol)
+{
+    if (vol < 0)
+        vol = 0;
+    if (vol > 15)
+        vol = 15;
+    sfx_volume = vol;
+}
+
+void audio_set_music_volume(int vol)
+{
+    if (vol < 0)
+        vol = 0;
+    if (vol > 15)
+        vol = 15;
+    music_volume = vol;
+    if (music_on)
+        music_apply_volume();
+}
+
+int audio_get_sfx_volume(void)
+{
+    return sfx_volume;
+}
+
+int audio_get_music_volume(void)
+{
+    return music_volume;
+}
 
 static const int controller_map[15] = {
     0x00, 0x20, 0x01, 0x07, 0x0A, 0x0B, 0x5B, 0x5D,
@@ -502,7 +581,7 @@ static int music_open(void)
     }
     if (mci_fail("play doommus from 0"))
         return 0;
-    mciSendStringA("setaudio doommus volume to 533", NULL, 0, NULL);
+    music_apply_volume();
     return 1;
 }
 

@@ -1,10 +1,10 @@
 # cobol_doom
 
-![DOOM rodando em GnuCOBOL com SDL2](screenshot/doom.png)
+![DOOM rodando em GnuCOBOL com SDL3](screenshot/doom.png)
 
 **Vídeo:** [DOOM rodando em GnuCOBOL — 80 a 180 FPS](https://youtu.be/fAJ51Vo9T58)
 
-DOOM generic portado de **[python_doom](https://github.com/vagucs/python_doom)** para **GnuCOBOL + SDL2**.
+DOOM generic portado de **[python_doom](https://github.com/vagucs/python_doom)** para **GnuCOBOL + SDL3**.
 
 Por **Wagner Nunes da Silva**
 
@@ -14,7 +14,7 @@ Por **Wagner Nunes da Silva**
 - [www.vagucs.com.br](https://www.vagucs.com.br)
 - [LinkedIn](https://www.linkedin.com/in/wagner-nunes-da-silva-b0a15360)
 
-Sim: o jogo é feito em COBOL. O laço, o mapa, a vista, as portas, as armas, os monstros, o menu e o placar estão nos `.cob`. Seis arquivos em `src/` são a borda que o GnuCOBOL não cobre: a janela SDL2, o som, a leitura binária do WAD, a conta de 32 bits, a escala da planta e o arquivo dos saves. O rato fica de fora.
+Sim: o jogo é feito em COBOL. O laço, o mapa, a vista, as portas, as armas, os monstros, o menu e o placar estão nos `.cob`. Seis arquivos em `src/` são a borda que o GnuCOBOL não cobre: a janela SDL3, o som, a leitura binária do WAD, a conta de 32 bits, a escala da planta e o arquivo dos saves. O rato fica de fora.
 
 English version: [README.md](README.md)
 
@@ -24,7 +24,7 @@ English version: [README.md](README.md)
 
 `python_doom` é um motor de DOOM condensado e jogável, em Python. Este diretório é a **mesma peça de estudo**, reescrita em COBOL:
 
-- Janela, teclas, cópia da tela e PCM: **SDL2**, chamada do COBOL com `CALL`
+- Janela, teclas, cópia da tela e PCM: **SDL3**, chamada do COBOL com `CALL`
 - Framebuffer: 320×200, esticado numa janela de 640×400
 - Passo: cerca de 28 ms, perto do tic de 35 Hz
 - Vista: BSP, paredes, piso, teto, céu, sprites e a arma na mão
@@ -78,7 +78,7 @@ Listas em Python são 0-based. `OCCURS` é 1-based. Um objeto vira um grupo `EXT
 | `a // b` | `DIVIDE` sem `ROUNDED`, ou `CALL "floor_div_i"` |
 | `fixed_mul` / `fixed_div` | `CALL "fixed_mul"` / `CALL "fixed_div"` |
 | framebuffer `bytearray` | `PIC X(64000)` |
-| pygame | SDL2, por `CALL` |
+| pygame | SDL3, por `CALL` |
 | `+=` | `CALL "add_i32"` — um `COMPUTE` arredonda |
 
 Escrever um campo do `COPY` `EXTERNAL` aparece nos outros programas, do mesmo jeito que um objeto em Python.
@@ -114,7 +114,7 @@ O motor é COBOL. Cada arquivo abaixo é uma função que o `CALL` alcança. Nen
 
 | Arquivo | Papel | Por que não ficou em COBOL |
 | --- | --- | --- |
-| `src/video.c` | Janela SDL2, paleta, teclado, Alt+Enter | O compilador não liga a SDL2 |
+| `src/video.c` | Janela SDL3, paleta, teclado, Alt+Enter | O compilador não liga a SDL3 |
 | `src/audio.c` | Fila PCM dos lumps `DS*` e MIDI pela MCI | Dispositivo de som e `winmm` |
 | `src/wadio.c` | Leitura binária e caminho do IWAD | `PIC X` preenche com espaço; o lump é byte cru |
 | `src/compat.c` | Estouro de 32 bits, 16.16, seno, arco-tangente, lado do nó | `COMPUTE` arredonda e o produto estoura diferente do C |
@@ -130,14 +130,14 @@ O motor é COBOL. Cada arquivo abaixo é uma função que o `CALL` alcança. Nen
 | Camada | Este port | Python (`python_doom`) |
 | --- | --- | --- |
 | Linguagem | GnuCOBOL 3.2 | Python 3.10+ |
-| Janela, teclas, cópia | SDL2, `CALL` a partir do COBOL | pygame 2.x |
-| Som | SDL2 para os efeitos, MCI para o MIDI | mixer do pygame, MCI no Windows |
+| Janela, teclas, cópia | SDL3, `CALL` a partir do COBOL | pygame 2.x |
+| Som | SDL3 para os efeitos, MCI para o MIDI | mixer do pygame, MCI no Windows |
 | Ponto fixo 16.16 | `src/compat.c` | `doom/compat.py` |
 | Rato | de fora | usado para olhar e atirar |
 | IWAD | os mesmos lumps | os mesmos lumps |
 | Compilação | `run.bat` (`cobc` + o gcc UCRT64) | `pip install -r requirements.txt` |
 
-O compilador usado aqui é o pacote MSYS2 `mingw-w64-ucrt-x86_64-gnucobol`, com o `gcc` e a `SDL2` de `C:\msys64\ucrt64`. O `run.bat` coloca essa pasta `bin` no `PATH` para achar a `SDL2.dll`.
+O compilador usado aqui é o pacote MSYS2 `mingw-w64-ucrt-x86_64-gnucobol`, com o `gcc` de `C:\msys64\ucrt64`. A SDL3 é a cópia em `sdl3/` (`SDL3.dll` 3.4.18). O `build.bat` copia essa DLL para o lado do executável.
 
 ---
 
@@ -151,11 +151,13 @@ run.bat
 
 O `build.bat` só compila. A janela é 640×400. A textura é 320×200.
 
-O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito. A janela nasce com vsync, então esse número pode travar na taxa do monitor. `-novsync` apresenta sem essa espera.
+O IWAD é o primeiro arquivo que existir entre `DOOM1.WAD`, `doom1.wad`, `DOOM.WAD`, `doom.wad`, `DOOM2.WAD`, `doom2.wad`, `PLUTONIA.WAD`, `TNT.WAD`, `freedoom1.wad` e `freedoom2.wad`. A busca começa em `DOOMWADDIR` ou `DOOMWADPATH`, se a variável existir, e segue pela pasta atual e pelas pastas acima. `-iwad` escolhe o arquivo. Um caminho solto terminado em `.wad` também serve. `-fps` mostra os quadros por segundo no canto superior direito. A janela nasce com vsync, então esse número pode travar na taxa do monitor. `-novsync` apresenta sem essa espera. `-playdemo nome` / `-timedemo nome` tocam o lump do IWAD (ex. `demo1`) ou um `.lmp`. Na tela-título o attract cycle (demo1→demo2→demo3) roda sozinho após ~5 s. Em Options → Sound Volume: setas esquerda/direita ajustam SFX e música (0–15).
 
 ```
 run.bat -iwad C:\wads\doom1.wad -fps
 run.bat -fps -novsync
+run.bat -iwad ..\DOOM1.WAD -playdemo demo1
+run.bat -iwad ..\DOOM1.WAD -timedemo demo1 -novsync
 ```
 
 Se o IWAD tem `MAP01`, o jogo novo pula o menu de episódio e abre a dificuldade, depois o MAP01. No shareware, o episódio 1 é o único; os outros avisam que pedem a versão registrada.
@@ -255,7 +257,7 @@ src/                 a borda em C, descrita acima
 ## Linhagem
 
 1. **[python_doom](https://github.com/vagucs/python_doom)** — Python + pygame
-2. **cobol_doom** — GnuCOBOL + SDL2 (esta árvore)
+2. **cobol_doom** — GnuCOBOL + SDL3 (esta árvore)
 
 ---
 

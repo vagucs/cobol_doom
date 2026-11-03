@@ -1,4 +1,4 @@
-/* DOOM generic portado do python_doom para COBOL com SDL2.
+/* DOOM generic portado do python_doom para COBOL com SDL3.
 
    Por Wagner Nunes da Silva
 
@@ -73,6 +73,27 @@ int path_is_dir(char *path, int path_len)
     if (attr == INVALID_FILE_ATTRIBUTES)
         return 0;
     return (attr & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0;
+}
+
+int file_size(char *path, int path_len)
+{
+    char tmp[520];
+    FILE *f;
+    long n;
+
+    cob_copy(path, path_len, tmp, (int)sizeof tmp);
+    f = fopen(tmp, "rb");
+    if (f == NULL)
+        return -1;
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return -1;
+    }
+    n = ftell(f);
+    fclose(f);
+    if (n < 0 || n > 0x7FFFFFFF)
+        return -1;
+    return (int)n;
 }
 
 int file_read(char *path, int path_len, int offset, int length, unsigned char *dest)
@@ -214,3 +235,46 @@ int u32_le(unsigned char *buf, int off)
         | ((unsigned int)buf[off + 2] << 16)
         | ((unsigned int)buf[off + 3] << 24));
 }
+
+/* Same fields as python/harbour sync_demo1.log (map units toward zero). */
+static FILE *sync_fp;
+
+static int map_unit(int v)
+{
+    if (v >= 0)
+        return v / 65536;
+    return -((-v) / 65536);
+}
+
+int sync_log_open(void)
+{
+    if (sync_fp != NULL) {
+        fclose(sync_fp);
+        sync_fp = NULL;
+    }
+    sync_fp = fopen("_sync_demo1.log", "w");
+    return sync_fp == NULL ? 1 : 0;
+}
+
+int sync_log_line(int tic, int hp, int armor, int x, int y, int z, int floorz,
+    int momx, int momy, int angle, int nalive, int sxsum, int prnd,
+    int weap, int misl)
+{
+    if (sync_fp == NULL)
+        return 1;
+    fprintf(sync_fp,
+        "%d %d %d %d %d %d %d %d %d %u %d %d %d %d %d\n",
+        tic, hp, armor, map_unit(x), map_unit(y), map_unit(z), map_unit(floorz),
+        momx, momy, (unsigned)angle, nalive, sxsum, prnd, weap, misl);
+    return 0;
+}
+
+int sync_log_close(void)
+{
+    if (sync_fp != NULL) {
+        fclose(sync_fp);
+        sync_fp = NULL;
+    }
+    return 0;
+}
+

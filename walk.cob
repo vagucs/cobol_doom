@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -78,6 +78,37 @@ COPY "playstate.cpy".
 01 mo-i BINARY-LONG.
 01 dist-n BINARY-LONG.
 01 top-z BINARY-LONG.
+01 xmove-n BINARY-LONG.
+01 ymove-n BINARY-LONG.
+01 hit-line BINARY-LONG.
+01 best-frac BINARY-LONG.
+01 frac-n BINARY-LONG.
+01 best-line BINARY-LONG.
+01 lead-x BINARY-LONG.
+01 lead-y BINARY-LONG.
+01 trail-x BINARY-LONG.
+01 trail-y BINARY-LONG.
+01 tr-x1 BINARY-LONG.
+01 tr-y1 BINARY-LONG.
+01 tr-x2 BINARY-LONG.
+01 tr-y2 BINARY-LONG.
+01 slide-mx BINARY-LONG.
+01 slide-my BINARY-LONG.
+01 line-ang BINARY-LONG.
+01 move-ang BINARY-LONG.
+01 delta-ang BINARY-LONG.
+01 aim-ang BINARY-LONG.
+01 ang5-n BINARY-LONG VALUE 59652323.
+01 new-len BINARY-LONG.
+01 slide-ok BINARY-LONG.
+01 slide-n BINARY-LONG.
+01 rem-n BINARY-LONG.
+01 dda-n BINARY-LONG.
+01 dda-i BINARY-LONG.
+01 dda-xy BINARY-LONG OCCURS 128 TIMES.
+01 tr-dx BINARY-LONG.
+01 tr-dy BINARY-LONG.
+01 trace-mode BINARY-LONG.
 
 LINKAGE SECTION.
 01 k-up BINARY-LONG.
@@ -88,19 +119,68 @@ LINKAGE SECTION.
 01 k-alt BINARY-LONG.
 01 k-comma BINARY-LONG.
 01 k-dot BINARY-LONG.
+*> 1=thrust only (playerThink), 2=XY+items (mobj thinker), 0=both.
+01 walk-phase BINARY-LONG.
 
 PROCEDURE DIVISION USING k-up k-down k-left k-right
-    k-shift k-alt k-comma k-dot.
+    k-shift k-alt k-comma k-dot walk-phase.
     IF ply-on = 0
         GOBACK
     END-IF
+    *> Phase 2 is the same tic as phase 1. Keep the move command so a
+    *> slow step still frictions instead of stopping (P_XYMovement).
+    IF walk-phase NOT = 2
+        MOVE 0 TO fwd-n
+        MOVE 0 TO side-n
+        MOVE 0 TO turn-n
+    END-IF
+    *> DeathThink: no thrust/angleturn from cmd — only residual mom XY.
+    IF ply-hp > 0 AND (walk-phase = 0 OR walk-phase = 1)
+    *> Demo: ticcmd forwardmove/sidemove/angleturn (python player_think).
+    IF demo-on = 1
+        MOVE cmd-fwd TO fwd-n
+        MOVE cmd-side TO side-n
+        MOVE cmd-turn TO turn-n
+        IF turn-n NOT = 0
+            CALL "shl_i" USING BY VALUE turn-n BY VALUE 16 RETURNING tmp
+            CALL "add_i32" USING BY VALUE ply-ang BY VALUE tmp
+                RETURNING ply-ang
+        END-IF
+        IF ply-z <= ply-floor
+            IF fwd-n NOT = 0
+                COMPUTE move-n = fwd-n * 2048
+                CALL "fine_cos_ang" USING BY VALUE ply-ang RETURNING cs
+                CALL "fine_sin_ang" USING BY VALUE ply-ang RETURNING sn
+                CALL "fixed_mul" USING BY VALUE move-n BY VALUE cs
+                    RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-momx BY VALUE tmp
+                    RETURNING ply-momx
+                CALL "fixed_mul" USING BY VALUE move-n BY VALUE sn
+                    RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-momy BY VALUE tmp
+                    RETURNING ply-momy
+            END-IF
+            IF side-n NOT = 0
+                COMPUTE move-n = side-n * 2048
+                CALL "sub_i32" USING BY VALUE ply-ang
+                    BY VALUE 1073741824 RETURNING tmp
+                CALL "fine_cos_ang" USING BY VALUE tmp RETURNING cs
+                CALL "fine_sin_ang" USING BY VALUE tmp RETURNING sn
+                CALL "fixed_mul" USING BY VALUE move-n BY VALUE cs
+                    RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-momx BY VALUE tmp
+                    RETURNING ply-momx
+                CALL "fixed_mul" USING BY VALUE move-n BY VALUE sn
+                    RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-momy BY VALUE tmp
+                    RETURNING ply-momy
+            END-IF
+        END-IF
+    ELSE
     MOVE 0 TO speed-n
     IF k-shift NOT = 0
         MOVE 1 TO speed-n
     END-IF
-    MOVE 0 TO fwd-n
-    MOVE 0 TO side-n
-    MOVE 0 TO turn-n
     IF k-left NOT = 0 OR k-right NOT = 0
         ADD 1 TO ply-turn
     ELSE
@@ -196,6 +276,16 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         CALL "fixed_mul" USING BY VALUE move-n BY VALUE sn RETURNING tmp
         CALL "add_i32" USING BY VALUE ply-momy BY VALUE tmp RETURNING ply-momy
     END-IF
+    END-IF
+    END-IF
+    *> P_DeathThink yaws once per tic, inside playerThink, before movers.
+    IF ply-hp <= 0 AND walk-phase NOT = 2
+        PERFORM death-yaw
+    END-IF
+    *> Phase 1 = playerThink thrust only; XY runs after MovePsprites.
+    IF walk-phase = 1
+        GOBACK
+    END-IF
     IF ply-momx NOT = 0 OR ply-momy NOT = 0
         IF ply-momx > 1966080
             MOVE 1966080 TO ply-momx
@@ -209,48 +299,63 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         IF ply-momy < -1966080
             MOVE -1966080 TO ply-momy
         END-IF
-        CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-momx RETURNING want-x
-        CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-momy RETURNING want-y
-        MOVE want-x TO try-x
-        MOVE want-y TO try-y
-        IF ply-clip = 1
-            PERFORM sector-at
-            MOVE sec-slot TO spot-sec
-            MOVE sec-floor-h(sec-slot) TO floor-z
-            MOVE sec-ceil-h(sec-slot) TO ceil-z
-            PERFORM accept-spot
-        ELSE
-            PERFORM try-spot
-            IF hit-n = 0
+        *> Harbour P_XYMovement trunc2 half-step (#18).
+        MOVE ply-momx TO xmove-n
+        MOVE ply-momy TO ymove-n
+        PERFORM UNTIL xmove-n = 0 AND ymove-n = 0
+            *> Harbour/Python: if xmove > MAXMOVE/2 OR ymove > MAXMOVE/2
+            *> (signed >; not abs).
+            IF xmove-n > 983040 OR ymove-n > 983040
+                CALL "trunc2_i32" USING BY VALUE xmove-n RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-x BY VALUE tmp
+                    RETURNING try-x
+                CALL "trunc2_i32" USING BY VALUE ymove-n RETURNING tmp
+                CALL "add_i32" USING BY VALUE ply-y BY VALUE tmp
+                    RETURNING try-y
+                CALL "trunc2_i32" USING BY VALUE xmove-n
+                    RETURNING xmove-n
+                CALL "trunc2_i32" USING BY VALUE ymove-n
+                    RETURNING ymove-n
+            ELSE
+                CALL "add_i32" USING BY VALUE ply-x BY VALUE xmove-n
+                    RETURNING try-x
+                CALL "add_i32" USING BY VALUE ply-y BY VALUE ymove-n
+                    RETURNING try-y
+                MOVE 0 TO xmove-n
+                MOVE 0 TO ymove-n
+            END-IF
+            IF ply-clip = 1
+                PERFORM sector-at
+                MOVE sec-slot TO spot-sec
+                MOVE sec-floor-h(sec-slot) TO floor-z
+                MOVE sec-ceil-h(sec-slot) TO ceil-z
                 PERFORM accept-spot
             ELSE
-                MOVE ply-x TO try-x
-                MOVE want-y TO try-y
                 PERFORM try-spot
                 IF hit-n = 0
                     PERFORM accept-spot
                 ELSE
-                    MOVE want-x TO try-x
-                    MOVE ply-y TO try-y
-                    PERFORM try-spot
-                    IF hit-n = 0
-                        PERFORM accept-spot
-                    END-IF
+                    PERFORM player-slide
+                    MOVE 0 TO xmove-n
+                    MOVE 0 TO ymove-n
                 END-IF
             END-IF
-        END-IF
+        END-PERFORM
     END-IF
-    IF fwd-n = 0 AND side-n = 0
-        CALL "abs_fixed_i" USING BY VALUE ply-momx RETURNING ax
-        CALL "abs_fixed_i" USING BY VALUE ply-momy RETURNING ay
-        IF ax < 4096 AND ay < 4096
-            MOVE 0 TO ply-momx
-            MOVE 0 TO ply-momy
+    *> Friction only on ground (Harbour P_XYMovement).
+    IF ply-z <= ply-floor
+        IF fwd-n = 0 AND side-n = 0
+            CALL "abs_fixed_i" USING BY VALUE ply-momx RETURNING ax
+            CALL "abs_fixed_i" USING BY VALUE ply-momy RETURNING ay
+            IF ax < 4096 AND ay < 4096
+                MOVE 0 TO ply-momx
+                MOVE 0 TO ply-momy
+            ELSE
+                PERFORM apply-friction
+            END-IF
         ELSE
             PERFORM apply-friction
         END-IF
-    ELSE
-        PERFORM apply-friction
     END-IF
     PERFORM apply-z
     IF ply-z <= ply-floor
@@ -352,8 +457,310 @@ accept-spot.
     MOVE spot-sec TO ply-room
     .
 
+player-slide.
+    *> P_SlideMove. Two traces. The third pass stairsteps and keeps mom.
+    MOVE 0 TO slide-ok
+    *> slide-n, not step-n: sector-at and the blockmap reuse step-n.
+    PERFORM VARYING slide-n FROM 1 BY 1 UNTIL slide-n > 2 OR slide-ok = 1
+        PERFORM slide-one-hit
+    END-PERFORM
+    IF slide-ok = 0
+        PERFORM stair-step
+    END-IF
+    .
+
+slide-one-hit.
+    IF ply-momx > 0
+        CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING lead-x
+        CALL "sub_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING trail-x
+    ELSE
+        CALL "sub_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING lead-x
+        CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING trail-x
+    END-IF
+    IF ply-momy > 0
+        CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING lead-y
+        CALL "sub_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING trail-y
+    ELSE
+        CALL "sub_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING lead-y
+        CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING trail-y
+    END-IF
+    COMPUTE best-frac = 65536 + 1
+    MOVE 0 TO best-line
+    MOVE 0 TO trace-mode
+    PERFORM slide-corners
+    *> A step under 16 units that starts on the wall is invisible to the
+    *> divline test (den 0 is a miss). The blockmap trace returns frac 0
+    *> for that touch. It also has to run when the wide scan already
+    *> picked a farther wall: at the acid door the body is on the
+    *> horizontal line, and a diagonal past the corner would otherwise
+    *> win and leave a momentum the reference kills.
+    IF slide-n < 3
+        CALL "abs_fixed_i" USING BY VALUE ply-momx RETURNING ax
+        CALL "abs_fixed_i" USING BY VALUE ply-momy RETURNING ay
+        IF ax <= 1048576 AND ay <= 1048576
+            MOVE 1 TO trace-mode
+            PERFORM slide-corners
+        END-IF
+    END-IF
+    IF best-line < 1
+        PERFORM stair-step
+        MOVE 1 TO slide-ok
+        EXIT PARAGRAPH
+    END-IF
+    SUBTRACT 2048 FROM best-frac
+    IF best-frac > 0
+        CALL "fixed_mul" USING BY VALUE ply-momx BY VALUE best-frac
+            RETURNING slide-mx
+        CALL "fixed_mul" USING BY VALUE ply-momy BY VALUE best-frac
+            RETURNING slide-my
+        CALL "add_i32" USING BY VALUE ply-x BY VALUE slide-mx RETURNING try-x
+        CALL "add_i32" USING BY VALUE ply-y BY VALUE slide-my RETURNING try-y
+        PERFORM try-spot
+        IF hit-n NOT = 0
+            PERFORM stair-step
+            MOVE 1 TO slide-ok
+            EXIT PARAGRAPH
+        END-IF
+        PERFORM accept-spot
+    END-IF
+    COMPUTE best-frac = 65536 - (best-frac + 2048)
+    IF best-frac > 65536
+        MOVE 65536 TO best-frac
+    END-IF
+    IF best-frac <= 0
+        MOVE 1 TO slide-ok
+        EXIT PARAGRAPH
+    END-IF
+    CALL "fixed_mul" USING BY VALUE ply-momx BY VALUE best-frac
+        RETURNING slide-mx
+    CALL "fixed_mul" USING BY VALUE ply-momy BY VALUE best-frac
+        RETURNING slide-my
+    MOVE best-line TO hit-line
+    PERFORM hit-slide-line
+    MOVE slide-mx TO ply-momx
+    MOVE slide-my TO ply-momy
+    CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-momx RETURNING try-x
+    CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-momy RETURNING try-y
+    PERFORM try-spot
+    IF hit-n = 0
+        PERFORM accept-spot
+        MOVE 1 TO slide-ok
+    END-IF
+    .
+
+slide-corners.
+    MOVE lead-x TO tr-x1
+    MOVE lead-y TO tr-y1
+    PERFORM slide-trace
+    MOVE trail-x TO tr-x1
+    MOVE lead-y TO tr-y1
+    PERFORM slide-trace
+    MOVE lead-x TO tr-x1
+    MOVE trail-y TO tr-y1
+    PERFORM slide-trace
+    .
+
+slide-trace.
+    IF trace-mode = 1
+        PERFORM slide-trace-touch
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING line-slot FROM 1 BY 1 UNTIL line-slot > n-line
+        MOVE ln-v1(line-slot) TO v1-slot
+        MOVE ln-v2(line-slot) TO v2-slot
+        *> Linedef 0 is the leading 0 of every blockmap list. A step under
+        *> 16 units uses P_PointOnLineSide, so that wall can win the slide.
+        IF line-slot = 1
+            CALL "slide_frac" USING
+                BY VALUE tr-x1 BY VALUE tr-y1
+                BY VALUE ply-momx BY VALUE ply-momy
+                BY VALUE vtx-x(v1-slot) BY VALUE vtx-y(v1-slot)
+                BY VALUE vtx-x(v2-slot) BY VALUE vtx-y(v2-slot)
+                RETURNING tmp
+        ELSE
+            CALL "trace_frac" USING
+                BY VALUE tr-x1 BY VALUE tr-y1
+                BY VALUE ply-momx BY VALUE ply-momy
+                BY VALUE vtx-x(v1-slot) BY VALUE vtx-y(v1-slot)
+                BY VALUE vtx-x(v2-slot) BY VALUE vtx-y(v2-slot)
+                RETURNING tmp
+        END-IF
+        *> Frac 0 here is the >>8 cross product collapsing a corner that
+        *> only grazes the line. Vanilla's blockmap trace nudges that
+        *> start off the boundary and keeps the real intercept. A stored
+        *> 0 would slide the whole momentum.
+        IF tmp > 0 AND tmp <= 65536 AND tmp < best-frac
+            MOVE tmp TO frac-n
+            PERFORM slide-blocking
+            IF bit-n = 1
+                MOVE frac-n TO best-frac
+                MOVE line-slot TO best-line
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+slide-trace-touch.
+    *> P_PathTraverse: only the blocks the corner crosses. slide_frac
+    *> uses P_PointOnLineSide when the step is under 16 units, so a
+    *> trace that starts on the wall (frac 0) still counts.
+    CALL "add_i32" USING BY VALUE tr-x1 BY VALUE ply-momx RETURNING tr-x2
+    CALL "add_i32" USING BY VALUE tr-y1 BY VALUE ply-momy RETURNING tr-y2
+    CALL "slide_dda" USING
+        BY VALUE tr-x1 BY VALUE tr-y1
+        BY VALUE tr-x2 BY VALUE tr-y2
+        BY VALUE blk-org-x BY VALUE blk-org-y
+        BY REFERENCE dda-n
+        BY REFERENCE dda-xy(1)
+        BY REFERENCE tr-x1 BY REFERENCE tr-y1
+        BY REFERENCE tr-dx BY REFERENCE tr-dy
+    IF dda-n < 1
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO seen-gen
+    PERFORM VARYING dda-i FROM 0 BY 1 UNTIL dda-i >= dda-n
+        COMPUTE p1 = dda-i * 2 + 1
+        MOVE dda-xy(p1) TO bx
+        ADD 1 TO p1
+        MOVE dda-xy(p1) TO by-n
+        PERFORM slide-block
+    END-PERFORM
+    .
+
+slide-block.
+    IF bx < 0 OR by-n < 0 OR bx >= blk-w OR by-n >= blk-h
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE off-n = 4 + by-n * blk-w + bx
+    IF off-n < 0 OR off-n >= n-block
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE step-n = off-n + 1
+    MOVE blk-raw(step-n) TO off-n
+    PERFORM UNTIL off-n < 0 OR off-n >= n-block
+        COMPUTE step-n = off-n + 1
+        MOVE blk-raw(step-n) TO line-n
+        ADD 1 TO off-n
+        IF line-n = 65535
+            EXIT PERFORM
+        END-IF
+        COMPUTE line-slot = line-n + 1
+        IF line-slot >= 1 AND line-slot <= n-line
+            IF seen-ln(line-slot) NOT = seen-gen
+                MOVE seen-gen TO seen-ln(line-slot)
+                PERFORM slide-consider
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+slide-consider.
+    MOVE ln-v1(line-slot) TO v1-slot
+    MOVE ln-v2(line-slot) TO v2-slot
+    CALL "slide_frac" USING
+        BY VALUE tr-x1 BY VALUE tr-y1
+        BY VALUE tr-dx BY VALUE tr-dy
+        BY VALUE vtx-x(v1-slot) BY VALUE vtx-y(v1-slot)
+        BY VALUE vtx-x(v2-slot) BY VALUE vtx-y(v2-slot)
+        RETURNING tmp
+    IF tmp >= 0 AND tmp <= 65536 AND tmp < best-frac
+        *> slide-blocking reuses tmp for opening height. Keep the frac.
+        MOVE tmp TO frac-n
+        PERFORM slide-blocking
+        IF bit-n = 1
+            MOVE frac-n TO best-frac
+            MOVE line-slot TO best-line
+        END-IF
+    END-IF
+    .
+
+slide-blocking.
+    *> PTR_SlideTraverse: one-sided or too-tight opening.
+    MOVE 0 TO bit-n
+    IF ln-back(line-slot) < 0
+        CALL "delta_shr16" USING BY VALUE vtx-x(v2-slot)
+            BY VALUE vtx-x(v1-slot) RETURNING ldx
+        CALL "delta_shr16" USING BY VALUE vtx-y(v2-slot)
+            BY VALUE vtx-y(v1-slot) RETURNING ldy
+        MOVE ply-x TO dx
+        MOVE ply-y TO dy
+        PERFORM point-side
+        IF side-bit = 0
+            MOVE 1 TO bit-n
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE sec-slot = ln-front(line-slot) + 1
+    COMPUTE rem-n = ln-back(line-slot) + 1
+    IF sec-slot < 1 OR rem-n < 1
+        OR sec-slot > n-sector OR rem-n > n-sector
+        MOVE 1 TO bit-n
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-ceil-h(sec-slot) < sec-ceil-h(rem-n)
+        MOVE sec-ceil-h(sec-slot) TO open-top
+    ELSE
+        MOVE sec-ceil-h(rem-n) TO open-top
+    END-IF
+    IF sec-floor-h(sec-slot) > sec-floor-h(rem-n)
+        MOVE sec-floor-h(sec-slot) TO open-bot
+    ELSE
+        MOVE sec-floor-h(rem-n) TO open-bot
+    END-IF
+    CALL "sub_i32" USING BY VALUE open-top BY VALUE open-bot RETURNING tmp
+    IF tmp < ply-h
+        MOVE 1 TO bit-n
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE open-top BY VALUE ply-z RETURNING tmp
+    IF tmp < ply-h
+        MOVE 1 TO bit-n
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE open-bot BY VALUE ply-z RETURNING tmp
+    IF tmp > 1572864
+        MOVE 1 TO bit-n
+    END-IF
+    .
+
+hit-slide-line.
+    MOVE hit-line TO line-slot
+    MOVE ln-v1(line-slot) TO v1-slot
+    MOVE ln-v2(line-slot) TO v2-slot
+    CALL "sub_i32" USING BY VALUE vtx-x(v2-slot)
+        BY VALUE vtx-x(v1-slot) RETURNING ldx
+    CALL "sub_i32" USING BY VALUE vtx-y(v2-slot)
+        BY VALUE vtx-y(v1-slot) RETURNING ldy
+    CALL "hit_slide_line" USING
+        BY VALUE ply-x BY VALUE ply-y
+        BY VALUE vtx-x(v1-slot) BY VALUE vtx-y(v1-slot)
+        BY VALUE ldx BY VALUE ldy
+        BY VALUE slide-mx BY VALUE slide-my
+        BY REFERENCE slide-mx BY REFERENCE slide-my
+    .
+
+stair-step.
+    *> Harbour P_SlideMove: try Y, then X, and leave mom alone if both miss.
+    MOVE ply-x TO try-x
+    CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-momy
+        RETURNING try-y
+    PERFORM try-spot
+    IF hit-n = 0
+        PERFORM accept-spot
+        EXIT PARAGRAPH
+    END-IF
+    CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-momx
+        RETURNING try-x
+    MOVE ply-y TO try-y
+    PERFORM try-spot
+    IF hit-n = 0
+        PERFORM accept-spot
+    END-IF
+    .
+
 try-spot.
     MOVE 0 TO hit-n
+    MOVE 0 TO hit-line
     CALL "sub_i32" USING BY VALUE try-x BY VALUE ply-rad RETURNING box-l
     CALL "add_i32" USING BY VALUE try-x BY VALUE ply-rad RETURNING box-r
     CALL "sub_i32" USING BY VALUE try-y BY VALUE ply-rad RETURNING box-b
@@ -475,12 +882,14 @@ one-line.
     END-IF
     IF ln-back(line-slot) < 0
         MOVE 1 TO hit-n
+        MOVE line-slot TO hit-line
         EXIT PARAGRAPH
     END-IF
     CALL "bit_and" USING BY VALUE ln-flags(line-slot) BY VALUE 1
         RETURNING bit-n
     IF bit-n NOT = 0
         MOVE 1 TO hit-n
+        MOVE line-slot TO hit-line
         EXIT PARAGRAPH
     END-IF
     COMPUTE sec-slot = ln-front(line-slot) + 1
@@ -520,32 +929,33 @@ box-side.
         BY VALUE vtx-x(v1-slot) RETURNING ldx
     CALL "delta_shr16" USING BY VALUE vtx-y(v2-slot)
         BY VALUE vtx-y(v1-slot) RETURNING ldy
+    *> P_BoxOnLineSide (#4): C boolean true⇒1; vertical xor when dy < 0.
     IF ldx = 0
         IF box-r < vtx-x(v1-slot)
-            MOVE 0 TO p1
-        ELSE
             MOVE 1 TO p1
+        ELSE
+            MOVE 0 TO p1
         END-IF
         IF box-l < vtx-x(v1-slot)
-            MOVE 0 TO p2
-        ELSE
             MOVE 1 TO p2
+        ELSE
+            MOVE 0 TO p2
         END-IF
-        IF ldy > 0
+        IF ldy < 0
             CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
             CALL "bit_xor" USING BY VALUE p2 BY VALUE 1 RETURNING p2
         END-IF
     ELSE
         IF ldy = 0
             IF box-t > vtx-y(v1-slot)
-                MOVE 0 TO p1
-            ELSE
                 MOVE 1 TO p1
+            ELSE
+                MOVE 0 TO p1
             END-IF
             IF box-b > vtx-y(v1-slot)
-                MOVE 0 TO p2
-            ELSE
                 MOVE 1 TO p2
+            ELSE
+                MOVE 0 TO p2
             END-IF
             IF ldx < 0
                 CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
@@ -624,6 +1034,34 @@ point-side.
     END-IF
     .
 
+death-yaw.
+    IF ply-atk < 1 OR ply-atk > n-mobj
+        EXIT PARAGRAPH
+    END-IF
+    IF mo-name(ply-atk) = SPACES
+        EXIT PARAGRAPH
+    END-IF
+    CALL "point_to_angle" USING
+        BY VALUE ply-x BY VALUE ply-y
+        BY VALUE mo-x(ply-atk) BY VALUE mo-y(ply-atk)
+        RETURNING aim-ang
+    CALL "sub_i32" USING BY VALUE aim-ang BY VALUE ply-ang
+        RETURNING delta-ang
+    *> ANG5 = ANG90/18. Snap only while the gap is strictly inside it.
+    CALL "sub_i32" USING BY VALUE 0 BY VALUE ang5-n RETURNING tmp
+    IF delta-ang > tmp AND delta-ang < ang5-n
+        MOVE aim-ang TO ply-ang
+    ELSE
+        IF delta-ang > 0
+            CALL "add_i32" USING BY VALUE ply-ang BY VALUE ang5-n
+                RETURNING ply-ang
+        ELSE
+            CALL "sub_i32" USING BY VALUE ply-ang BY VALUE ang5-n
+                RETURNING ply-ang
+        END-IF
+    END-IF
+    .
+
 sector-at.
     MOVE 1 TO sub-slot
     MOVE 1 TO sec-slot
@@ -683,6 +1121,8 @@ COPY "playstate.cpy".
 01 atk-x BINARY-LONG.
 01 atk-y BINARY-LONG.
 01 saved-n BINARY-LONG.
+01 rnd-n BINARY-LONG.
+01 skip-dmg BINARY-LONG.
 
 LINKAGE SECTION.
 01 hurt-out BINARY-LONG.
@@ -693,45 +1133,68 @@ main-floor.
     IF ply-on = 0
         GOBACK
     END-IF
+    *> Harbour P_PlayerInSpecialSector: z==floor; 4/16 rolls P_Random
+    *> every tic while suited (before leveltime&0x1f); then damage.
     IF ply-room >= 1 AND ply-room <= n-sector
-        IF sec-special(ply-room) = 9
+        AND ply-z = sec-floor-h(ply-room)
+        MOVE sec-special(ply-room) TO spec-n
+        IF spec-n = 9
             ADD 1 TO ply-secs
             MOVE 0 TO sec-special(ply-room)
         END-IF
-    END-IF
-    DIVIDE ply-time BY 32 GIVING q-n REMAINDER rem-n
-    ADD 1 TO ply-time
-    IF rem-n NOT = 0
-        GOBACK
-    END-IF
-    IF ply-hp <= 0
-        GOBACK
-    END-IF
-    IF ply-room < 1 OR ply-room > n-sector
-        GOBACK
-    END-IF
-    IF ply-z NOT = sec-floor-h(ply-room)
-        GOBACK
-    END-IF
-    MOVE sec-special(ply-room) TO spec-n
-    MOVE 0 TO dmg-n
-    IF spec-n = 5
-        MOVE 10 TO dmg-n
-    END-IF
-    IF spec-n = 7
-        MOVE 5 TO dmg-n
-    END-IF
-    IF spec-n = 4 OR spec-n = 16 OR spec-n = 11
-        MOVE 20 TO dmg-n
-    END-IF
-    IF dmg-n = 0 OR ply-god = 1 OR ply-inv > 0
-        GOBACK
-    END-IF
-    IF ply-suit > 0
-        IF spec-n = 5 OR spec-n = 7
-            GOBACK
+        IF spec-n = 11
+            MOVE 0 TO ply-god
+            DIVIDE ply-time BY 32 GIVING q-n REMAINDER rem-n
+            IF rem-n = 0 AND ply-hp > 0 AND ply-god = 0
+                AND ply-inv = 0
+                MOVE 20 TO dmg-n
+                PERFORM apply-floor-dmg
+            END-IF
+            IF ply-hp <= 10 AND ply-exit = 0
+                MOVE 1 TO ply-exit
+            END-IF
+        END-IF
+        IF spec-n = 5 OR spec-n = 7 OR spec-n = 4 OR spec-n = 16
+            MOVE 0 TO skip-dmg
+            IF spec-n = 4 OR spec-n = 16
+                IF ply-suit > 0
+                    CALL "p-random" USING rnd-n
+                    IF rnd-n >= 5
+                        MOVE 1 TO skip-dmg
+                    END-IF
+                END-IF
+            ELSE
+                IF ply-suit > 0
+                    MOVE 1 TO skip-dmg
+                END-IF
+            END-IF
+            IF skip-dmg = 0
+                DIVIDE ply-time BY 32 GIVING q-n REMAINDER rem-n
+                IF rem-n = 0 AND ply-hp > 0 AND ply-god = 0
+                    AND ply-inv = 0
+                    MOVE 0 TO dmg-n
+                    IF spec-n = 5
+                        MOVE 10 TO dmg-n
+                    END-IF
+                    IF spec-n = 7
+                        MOVE 5 TO dmg-n
+                    END-IF
+                    IF spec-n = 4 OR spec-n = 16
+                        MOVE 20 TO dmg-n
+                    END-IF
+                    IF dmg-n > 0
+                        PERFORM apply-floor-dmg
+                    END-IF
+                END-IF
+            END-IF
         END-IF
     END-IF
+    *> leveltime++ at end of tic (main), like Harbour/Python.
+    GOBACK.
+
+apply-floor-dmg.
+    *> Sector damage has no source, so it clears the attacker.
+    MOVE 0 TO ply-atk
     IF ply-atype > 0 AND ply-armor > 0
         IF ply-atype = 1
             DIVIDE dmg-n BY 3 GIVING saved-n
@@ -764,11 +1227,14 @@ main-floor.
         MOVE 0 TO atk-on
         CALL "face-hit" USING dmg-n atk-on atk-x atk-y
         CALL "ply-ouch"
+        MOVE 1 TO hurt-out
+        *> P_DamageMobj draws the pain chance after the hit lands.
+        *> The player painchance is 255, so the draw is what keeps the
+        *> random table aligned. A killing blow does not draw it.
+        IF ply-hp > 0
+            CALL "p-random" USING rnd-n
+        END-IF
     END-IF
-    MOVE 1 TO hurt-out
-    IF spec-n = 11 AND ply-hp <= 10 AND ply-exit = 0
-        MOVE 1 TO ply-exit
-    END-IF
-    GOBACK.
+    .
 
 END PROGRAM floor-tic.

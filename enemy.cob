@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -18,28 +18,44 @@ WORKING-STORAGE SECTION.
 01 dirs-on BINARY-LONG VALUE 0.
 01 xs BINARY-LONG OCCURS 8 TIMES.
 01 ys BINARY-LONG OCCURS 8 TIMES.
-01 rnd-i BINARY-LONG VALUE 0.
 01 rnd-n BINARY-LONG.
 01 rnd-a BINARY-LONG.
-01 rnd-lo PIC X(128) VALUE
-    X"00086ddcdef1956b4bf8fe8c10424a15d32f50f29a1bcd80a1594d245f6e5530d48cd3f9164fc8321cbc348cca7844913e46b8be5bc598e0956819b2fcb6cab68dc50451b5f2912a27e39cc6e1c1db5d7aaff900af8f46ef2ef6a335a36da88702eb195c14918a4d45a64eb0add4a6715ea12932ef316fa4463c0225ab4b889c".
-01 rnd-hi PIC X(128) VALUE
-    X"0b382a928ae549924d3d62c4876a3fc5c35660cb7165aaf7b57150fa6c07ffed81e24f6b70a667f118dfef78c63a3c528003b8428fe091e051cea32d3f5aa8723b219f5f1c8b7b627dc40f46c2fd360e6de24711a15dba57f48a14347bfb1a24112e34e7e84c1fdd5425d8a5d46ac5f2622b27affe91be5476debb8878a3ecf9".
 01 hear-id BINARY-LONG VALUE 0.
 01 snd-name PIC X(6).
+*> P_NoiseAlert: validcount (sec-mark) + soundtraversed (sec-trav) per flood;
+*> sec-alert stays set like vanilla soundtarget (not cleared by later floods).
 01 sec-mark BINARY-LONG OCCURS 512 TIMES.
+01 sec-trav BINARY-LONG OCCURS 512 TIMES.
+01 sec-alert BINARY-LONG OCCURS 512 TIMES.
 01 n-q BINARY-LONG.
 01 q-at BINARY-LONG.
-01 q-sec BINARY-LONG OCCURS 64 TIMES.
-01 q-blk BINARY-LONG OCCURS 64 TIMES.
+01 q-sec BINARY-LONG OCCURS 512 TIMES.
+01 q-blk BINARY-LONG OCCURS 512 TIMES.
+01 hear-blk BINARY-LONG.
 01 mo-i BINARY-LONG.
 01 foe-j BINARY-LONG.
+01 own-n BINARY-LONG.
+01 aim-x BINARY-LONG.
+01 aim-y BINARY-LONG.
+01 aim-z BINARY-LONG.
+01 aim-h BINARY-LONG.
+01 aim-sec BINARY-LONG.
+01 aim-rad BINARY-LONG.
+01 aim-shadow BINARY-LONG.
+01 hit-fr BINARY-LONG.
+01 hit-mo BINARY-LONG.
 01 who-i BINARY-LONG.
+01 born-i BINARY-LONG.
+01 bexp-a BINARY-LONG.
+01 bexp-b BINARY-LONG.
+01 bexp-c BINARY-LONG.
 01 cls-n BINARY-LONG.
+01 melee-go BINARY-LONG VALUE 0.
 01 spd-u BINARY-LONG.
 01 ball-spd BINARY-LONG.
 01 ball-mul BINARY-LONG.
 01 shot-k BINARY-LONG.
+01 ray-nopuff BINARY-LONG.
 01 save-ang BINARY-LONG.
 01 raised-n BINARY-LONG.
 01 soul-n BINARY-LONG.
@@ -74,6 +90,9 @@ WORKING-STORAGE SECTION.
 01 tdy BINARY-LONG.
 01 side-bit BINARY-LONG.
 01 side-a BINARY-LONG.
+01 door-mode BINARY-LONG.
+01 door-busy BINARY-LONG.
+01 door-moved BINARY-LONG.
 01 left-v BINARY-LONG.
 01 right-v BINARY-LONG.
 01 sh1 BINARY-LONG.
@@ -83,6 +102,9 @@ WORKING-STORAGE SECTION.
 01 den BINARY-LONG.
 01 numv BINARY-LONG.
 01 frac BINARY-LONG.
+01 eye-z BINARY-LONG.
+01 slope-t BINARY-LONG.
+01 slope-b BINARY-LONG.
 01 did-cross BINARY-LONG.
 01 blocked BINARY-LONG.
 01 box-l BINARY-LONG.
@@ -124,35 +146,124 @@ WORKING-STORAGE SECTION.
 01 new-blk BINARY-LONG.
 01 keep-sec BINARY-LONG.
 01 shot-keep BINARY-LONG.
+*> P_CheckPosition / P_TryMove (same shape as walk-tic try-spot).
+01 floor-z BINARY-LONG.
+01 ceil-z BINARY-LONG.
+01 drop-z BINARY-LONG.
+01 open-top BINARY-LONG.
+01 open-bot BINARY-LONG.
+01 low-z BINARY-LONG.
+01 seen-gen BINARY-LONG VALUE 0.
+01 seen-ln BINARY-LONG OCCURS 3200 TIMES.
+01 p1 BINARY-LONG.
+01 p2 BINARY-LONG.
+01 bx BINARY-LONG.
+01 by-n BINARY-LONG.
+01 xl BINARY-LONG.
+01 xh BINARY-LONG.
+01 yl BINARY-LONG.
+01 yh BINARY-LONG.
+01 off-n BINARY-LONG.
+01 line-n BINARY-LONG.
+01 line-slot BINARY-LONG.
+01 v1-slot BINARY-LONG.
+01 v2-slot BINARY-LONG.
+01 ldx BINARY-LONG.
+01 ldy BINARY-LONG.
+*> P_Move lastspechit (special lines touched by failed TryMove).
+01 n-spechit BINARY-LONG VALUE 0.
+01 spechit-ln BINARY-LONG OCCURS 64 TIMES.
+01 spechit-i BINARY-LONG.
+01 opened-n BINARY-LONG.
+01 use-ok BINARY-LONG.
+01 dtype BINARY-LONG.
+01 di BINARY-LONG.
+01 nb BINARY-LONG.
+01 low-h BINARY-LONG.
+01 sec-index BINARY-LONG.
+*> P_XYMovement for living monsters (mom from DamageMobj thrust).
+01 xmove-n BINARY-LONG.
+01 ymove-n BINARY-LONG.
 COPY "mapstate.cpy".
+COPY "movstate.cpy".
 COPY "playstate.cpy".
 COPY "sprstate.cpy".
 
 LINKAGE SECTION.
 01 moved-out BINARY-LONG.
+01 pass-n BINARY-LONG.
 
-PROCEDURE DIVISION USING moved-out.
+PROCEDURE DIVISION USING moved-out pass-n.
 main-enemy.
+    *> 1 = missile pass, after light thinkers. Damage RNG must follow them.
+    IF pass-n = 1
+        PERFORM VARYING mo-i FROM 1 BY 1 UNTIL mo-i > n-mobj
+            IF mo-kind(mo-i) = 4
+                MOVE mo-i TO who-i
+                PERFORM fly-ball
+            END-IF
+        END-PERFORM
+        GOBACK
+    END-IF
     IF dirs-on = 0
         PERFORM fill-dirs
         MOVE 1 TO dirs-on
     END-IF
+    *> New level: drop stale soundtargets from the previous map.
+    IF ply-time = 0 AND hear-id NOT = 0
+        MOVE 0 TO hear-id
+        PERFORM VARYING li FROM 1 BY 1 UNTIL li > 512
+            MOVE 0 TO sec-alert(li)
+            MOVE 0 TO sec-mark(li)
+            MOVE 0 TO sec-trav(li)
+        END-PERFORM
+    END-IF
     MOVE 0 TO moved-out
+    PERFORM hear-shot
+    *> Sight / REJECT use the post-move player sector (XY already applied).
     MOVE ply-x TO walk-x
     MOVE ply-y TO walk-y
     PERFORM locate-sec
     MOVE sec-slot TO ply-sec
-    PERFORM hear-shot
     PERFORM VARYING mo-i FROM 1 BY 1 UNTIL mo-i > n-mobj
         MOVE mo-i TO who-i
+        *> A_Scream was noted in tick-fx. Run it here, in list order.
+        IF mo-react(who-i) = 98
+            MOVE 0 TO mo-react(who-i)
+            MOVE who-i TO scream-slot
+            CALL "gun-tic" USING bexp-a bexp-b bexp-c
+        END-IF
+        *> A_Fall was noted in gun tick-fx, before the player walk. Apply it now.
+        IF mo-react(who-i) = 99
+            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE -3
+                RETURNING mo-flags(who-i)
+            MOVE 0 TO mo-react(who-i)
+        END-IF
+        *> Kind 4 flies in the later pass, after T_LightFlash.
         IF mo-kind(who-i) = 4
-            PERFORM fly-ball
+            CONTINUE
         ELSE
+            *> Player rockets are kind 5 and already move in fly-bolts.
+            *> They are not shootable, so the corpse slide below would
+            *> run P_XYMovement and pin z to the floor. The next tic
+            *> then dips under the floor and the blast hits the player.
+            IF mo-kind(who-i) = 5
+                EXIT PERFORM CYCLE
+            END-IF
             CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 4
                 RETURNING bit-n
             IF bit-n NOT = 0
                 PERFORM think-one
             ELSE
+                *> Corpses and the barrel fuse still slide (P_XYMovement).
+                *> State (BEXP fuse) runs after the slide, in list order.
+                IF mo-mx(who-i) NOT = 0 OR mo-my(who-i) NOT = 0
+                    PERFORM mon-xy-move
+                END-IF
+                IF mo-name(who-i) = "BEXP"
+                    MOVE who-i TO bexp-slot
+                    CALL "gun-tic" USING bexp-a bexp-b bexp-c
+                END-IF
                 PERFORM rise-dead
             END-IF
         END-IF
@@ -182,7 +293,7 @@ rise-dead.
     MOVE 0 TO mo-step(who-i)
     MOVE 0 TO mo-count(who-i)
     MOVE 8 TO mo-wait(who-i)
-    MOVE 8 TO mo-dir(who-i)
+    MOVE 0 TO mo-dir(who-i)
     MOVE 0 TO mo-mx(who-i)
     MOVE 0 TO mo-my(who-i)
     MOVE 4194310 TO mo-flags(who-i)
@@ -207,7 +318,8 @@ fill-dirs.
     MOVE 0 TO ys(5)
     MOVE -47000 TO ys(6)
     MOVE -65536 TO ys(7)
-    MOVE 47000 TO ys(8)
+    *> dir 7 = SE: yspeed must be -47000 (was +47000 → same as NE).
+    MOVE -47000 TO ys(8)
     .
 
 think-one.
@@ -252,6 +364,10 @@ think-one.
         MOVE 5 TO cls-n
         MOVE 20 TO spd-u
     END-IF
+    *> P_MobjThinker: P_XYMovement before state, including barrels (cls 0).
+    IF mo-mx(who-i) NOT = 0 OR mo-my(who-i) NOT = 0
+        PERFORM mon-xy-move
+    END-IF
     IF cls-n = 0
         EXIT PARAGRAPH
     END-IF
@@ -278,33 +394,51 @@ think-one.
     .
 
 idle-one.
+    *> P_MobjThinker stand: tics-- then A_Look when tics hits 0 (same tic).
     MOVE mo-x(who-i) TO walk-x
     MOVE mo-y(who-i) TO walk-y
     PERFORM locate-sec
     MOVE sec-slot TO mon-sec
-    IF hear-id > 0 AND mon-sec >= 1 AND mon-sec <= 512
-        IF sec-mark(mon-sec) = hear-id
-            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 32
-                RETURNING bit-n
-            IF bit-n = 0
-                PERFORM go-chase
-                EXIT PARAGRAPH
-            END-IF
+    *> A_Look: no wake on a dead player (MF_SHOOTABLE / health).
+    IF ply-hp <= 0
+        IF mo-tic(who-i) > 0
+            SUBTRACT 1 FROM mo-tic(who-i)
         END-IF
-    END-IF
-    IF mo-wait(who-i) > 0
-        SUBTRACT 1 FROM mo-wait(who-i)
         EXIT PARAGRAPH
     END-IF
-    MOVE 8 TO mo-wait(who-i)
+    IF mo-tic(who-i) > 0
+        SUBTRACT 1 FROM mo-tic(who-i)
+    END-IF
+    IF mo-tic(who-i) > 0
+        EXIT PARAGRAPH
+    END-IF
+    *> State loop S_*_STND tics=10, then A_Look (soundtarget first).
+    MOVE 10 TO mo-tic(who-i)
     IF mo-frame(who-i) = 0
         MOVE 1 TO mo-frame(who-i)
     ELSE
         MOVE 0 TO mo-frame(who-i)
     END-IF
     MOVE 1 TO moved-out
-    MOVE 1 TO need-face
-    PERFORM can-see
+    MOVE 0 TO see-ok
+    *> Harbour A_Look: sector->soundtarget persists until a later flood overwrites
+    *> that sector (do not require sec-mark = current hear-id).
+    IF mon-sec >= 1 AND mon-sec <= 512
+        IF sec-alert(mon-sec) = 1
+            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 32
+                RETURNING bit-n
+            IF bit-n = 0
+                MOVE 1 TO see-ok
+            ELSE
+                *> MF_AMBUSH: gunshot only wakes with sight.
+                MOVE 0 TO need-face
+                PERFORM can-see
+            END-IF
+        END-IF
+    END-IF
+    IF see-ok = 0
+        PERFORM look-for-player
+    END-IF
     IF see-ok = 1
         PERFORM go-chase
     END-IF
@@ -387,15 +521,16 @@ cry-see.
     .
 
 go-chase.
+    *> Harbour A_Look: does NOT clear movedir/movecount (#2).
+    *> setMobjState(seestate) runs A_Chase in the same call.
     IF mo-ai(who-i) = 0
         PERFORM cry-see
     END-IF
     MOVE 2 TO mo-ai(who-i)
     MOVE 0 TO mo-wait(who-i)
     MOVE 0 TO mo-step(who-i)
-    MOVE 8 TO mo-dir(who-i)
-    MOVE 0 TO mo-count(who-i)
     MOVE 1 TO moved-out
+    PERFORM chase-one
     .
 
 chase-one.
@@ -405,6 +540,10 @@ chase-one.
     IF mo-wait(who-i) > 0
         SUBTRACT 1 FROM mo-wait(who-i)
         EXIT PARAGRAPH
+    END-IF
+    *> Harbour A_Chase: one reactiontime tick per A_Chase (not per gametic).
+    IF mo-react(who-i) > 0
+        SUBTRACT 1 FROM mo-react(who-i)
     END-IF
     ADD 1 TO mo-step(who-i)
     IF mo-step(who-i) > 8
@@ -426,16 +565,76 @@ chase-one.
     IF mo-name(who-i) = "HEAD" OR mo-name(who-i) = "PAIN"
         PERFORM float-z
     END-IF
-    IF cls-n = 2 OR cls-n = 4
-        MOVE 2 TO mo-wait(who-i)
-    ELSE
+    *> See-state tics (info.c): POSS/FATT=4, SARG/SKEL/VILE=2, else 3.
+    *> wait = tics-1 so the next A_Chase lines up with setMobjState.
+    MOVE 2 TO mo-wait(who-i)
+    IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "FATT"
         MOVE 3 TO mo-wait(who-i)
+    END-IF
+    IF mo-name(who-i) = "SARG" OR mo-name(who-i) = "SKEL"
+        OR mo-name(who-i) = "VILE"
+        MOVE 1 TO mo-wait(who-i)
     END-IF
     MOVE 1 TO moved-out
     PERFORM one-chase
     .
 
 one-chase.
+    *> Dead or unshootable target: A_Chase looks, else spawnstate runs A_Look.
+    IF mo-tgt(who-i) > 0
+        MOVE mo-tgt(who-i) TO own-n
+        MOVE 0 TO step-ok
+        IF own-n > n-mobj
+            MOVE 1 TO step-ok
+        ELSE
+            CALL "bit_and" USING BY VALUE mo-flags(own-n) BY VALUE 4
+                RETURNING bit-n
+            IF mo-hp(own-n) <= 0 OR bit-n = 0
+                MOVE 1 TO step-ok
+            END-IF
+        END-IF
+        IF step-ok = 1
+            MOVE 0 TO mo-tgt(who-i)
+            MOVE 0 TO mo-thrs(who-i)
+            MOVE 0 TO need-face
+            PERFORM can-see
+            IF see-ok = 1
+                EXIT PARAGRAPH
+            END-IF
+            PERFORM notice-player
+            IF see-ok = 1
+                PERFORM cry-see
+            ELSE
+                MOVE 0 TO mo-ai(who-i)
+                MOVE 0 TO mo-frame(who-i)
+                MOVE 10 TO mo-tic(who-i)
+                EXIT PARAGRAPH
+            END-IF
+        END-IF
+    END-IF
+    *> A_Chase threshold: stick with the current target for BASETHRESHOLD calls.
+    IF mo-thrs(who-i) > 0
+        IF mo-tgt(who-i) > 0
+            MOVE mo-tgt(who-i) TO own-n
+            IF own-n > n-mobj OR mo-hp(own-n) <= 0
+                MOVE 0 TO mo-thrs(who-i)
+                MOVE 0 TO mo-tgt(who-i)
+            ELSE
+                SUBTRACT 1 FROM mo-thrs(who-i)
+            END-IF
+        ELSE
+            SUBTRACT 1 FROM mo-thrs(who-i)
+        END-IF
+    END-IF
+    *> MF_JUSTATTACKED: first A_Chase after missile only newChaseDir (no move/sound).
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 128
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        CALL "bit_xor" USING BY VALUE mo-flags(who-i) BY VALUE 128
+            RETURNING mo-flags(who-i)
+        PERFORM new-dir
+        EXIT PARAGRAPH
+    END-IF
     IF mo-name(who-i) = "VILE"
         PERFORM vile-raise
         IF raised-n = 1
@@ -446,30 +645,36 @@ one-chase.
         PERFORM face-dir
     END-IF
     PERFORM measure
+    *> MELEERANGE - 20*FRAC + target radius. Player radius keeps the old 60*FRAC.
+    COMPUTE reach = 2883584 + aim-rad
     IF cls-n = 2 OR cls-n = 3 OR cls-n = 4
         IF mo-name(who-i) NOT = "BSPI"
             AND mo-name(who-i) NOT = "CYBR"
             AND mo-name(who-i) NOT = "FATT"
             AND mo-name(who-i) NOT = "PAIN"
             AND mo-name(who-i) NOT = "VILE"
-            IF dist-n < 3932160
+            IF dist-n < reach
                 MOVE 0 TO need-face
                 PERFORM can-see
                 IF see-ok = 1
+                    MOVE 1 TO melee-go
                     PERFORM go-attack
                     EXIT PARAGRAPH
                 END-IF
             END-IF
         END-IF
     END-IF
-    SUBTRACT 1 FROM mo-count(who-i)
-    IF mo-count(who-i) < 0
+    *> Harbour A_Chase: missile check while movecount==0, then --movecount/move.
+    IF mo-count(who-i) = 0
         IF cls-n = 1 OR cls-n = 2 OR cls-n = 4
             PERFORM consider-shot
             IF mo-ai(who-i) = 3
                 EXIT PARAGRAPH
             END-IF
         END-IF
+    END-IF
+    SUBTRACT 1 FROM mo-count(who-i)
+    IF mo-count(who-i) < 0
         PERFORM new-dir
     ELSE
         PERFORM try-step
@@ -477,12 +682,38 @@ one-chase.
             PERFORM new-dir
         END-IF
     END-IF
+    *> A_Chase: always draw P_Random when MI_ACTIVESOUND is set.
+    IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
+        OR mo-name(who-i) = "TROO" OR mo-name(who-i) = "SARG"
+        OR mo-name(who-i) = "HEAD" OR mo-name(who-i) = "BOSS"
+        OR mo-name(who-i) = "CPOS" OR mo-name(who-i) = "SSWV"
+        OR mo-name(who-i) = "BOS2" OR mo-name(who-i) = "SPID"
+        OR mo-name(who-i) = "BSPI" OR mo-name(who-i) = "CYBR"
+        OR mo-name(who-i) = "SKEL" OR mo-name(who-i) = "FATT"
+        OR mo-name(who-i) = "PAIN" OR mo-name(who-i) = "VILE"
+        PERFORM take-rnd
+        IF rnd-n < 3
+            PERFORM active-snd
+        END-IF
+    END-IF
     .
 
 consider-shot.
-    MOVE 1 TO need-face
+    *> P_CheckMissileRange: sight only. FOV is A_Look, not this check.
+    MOVE 0 TO need-face
     PERFORM can-see
     IF see-ok = 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 64
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        CALL "bit_xor" USING BY VALUE mo-flags(who-i) BY VALUE 64
+            RETURNING mo-flags(who-i)
+        PERFORM go-attack
+        EXIT PARAGRAPH
+    END-IF
+    IF mo-react(who-i) > 0
         EXIT PARAGRAPH
     END-IF
     CALL "shar32" USING BY VALUE dist-n BY VALUE 16 RETURNING units
@@ -504,89 +735,158 @@ consider-shot.
     .
 
 go-attack.
+    *> setMobjState(missilestate): enter ATK1 same tic (sprite + FaceTarget).
+    *> wait = tics-1 — attack-one always exits after decrement; advance next tic.
     MOVE 3 TO mo-ai(who-i)
-    MOVE 0 TO mo-step(who-i)
-    MOVE 0 TO mo-wait(who-i)
+    MOVE 1 TO mo-step(who-i)
+    MOVE 4 TO mo-frame(who-i)
+    MOVE 9 TO mo-wait(who-i)
+    IF mo-name(who-i) = "TROO" OR mo-name(who-i) = "SARG"
+        OR mo-name(who-i) = "HEAD" OR mo-name(who-i) = "BOSS"
+        OR mo-name(who-i) = "BOS2"
+        MOVE 7 TO mo-wait(who-i)
+    END-IF
+    *> Missile only. Melee (demon/spectre) must not set MF_JUSTATTACKED
+    *> or the next A_Chase skips the move and the spectre drifts.
+    IF melee-go = 0
+        CALL "bit_or" USING BY VALUE mo-flags(who-i) BY VALUE 128
+            RETURNING mo-flags(who-i)
+    END-IF
+    IF melee-go = 1 AND mo-name(who-i) = "SARG"
+        MOVE "sgtatk" TO snd-name
+        CALL "sfx-play" USING snd-name
+    END-IF
+    MOVE 0 TO melee-go
+    PERFORM face-player
     MOVE 1 TO moved-out
     .
 
+face-player.
+    *> A_FaceTarget: player, or the monster this one is fighting.
+    PERFORM load-aim
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 32
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        CALL "bit_xor" USING BY VALUE mo-flags(who-i) BY VALUE 32
+            RETURNING mo-flags(who-i)
+    END-IF
+    CALL "point_to_angle" USING
+        BY VALUE mo-x(who-i) BY VALUE mo-y(who-i)
+        BY VALUE aim-x BY VALUE aim-y
+        RETURNING mo-ang(who-i)
+    PERFORM face-shadow
+    .
+
+face-shadow.
+    *> Target MF_SHADOW (player invis or spectre): (P_Random-P_Random)*<<21.
+    IF aim-shadow = 0
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM take-rnd
+    MOVE rnd-n TO rnd-a
+    PERFORM take-rnd
+    SUBTRACT rnd-n FROM rnd-a
+    CALL "mul_i32" USING BY VALUE rnd-a BY VALUE 2097152
+        RETURNING tmp
+    CALL "add_i32" USING BY VALUE mo-ang(who-i) BY VALUE tmp
+        RETURNING mo-ang(who-i)
+    .
+
 attack-one.
+    *> wait = tics-1; decrement always exits; wait already 0 → next ATK state.
     IF ply-hp <= 0
         PERFORM go-chase
         EXIT PARAGRAPH
     END-IF
-    CALL "point_to_angle" USING
-        BY VALUE mo-x(who-i) BY VALUE mo-y(who-i)
-        BY VALUE ply-x BY VALUE ply-y
-        RETURNING mo-ang(who-i)
-    MOVE 1 TO moved-out
     IF mo-wait(who-i) > 0
         SUBTRACT 1 FROM mo-wait(who-i)
         EXIT PARAGRAPH
     END-IF
     ADD 1 TO mo-step(who-i)
     IF cls-n = 1
-        PERFORM zom-frame
+        PERFORM zom-enter
     ELSE
-        PERFORM imp-frame
+        PERFORM imp-enter
     END-IF
     .
 
-zom-frame.
-    IF mo-step(who-i) = 1
-        MOVE 4 TO mo-frame(who-i)
-        MOVE 9 TO mo-wait(who-i)
-    END-IF
+zom-enter.
+    *> ATK2 PosAttack (POSS wait 7 / SPOS 9); ATK3 recovery; then seestate.
     IF mo-step(who-i) = 2
         MOVE 5 TO mo-frame(who-i)
         MOVE 7 TO mo-wait(who-i)
+        IF mo-name(who-i) = "SPOS" OR mo-name(who-i) = "CPOS"
+            OR mo-name(who-i) = "SSWV" OR mo-name(who-i) = "SPID"
+            MOVE 9 TO mo-wait(who-i)
+        END-IF
+        PERFORM face-player
+        MOVE 1 TO moved-out
         PERFORM zom-shot
+        EXIT PARAGRAPH
     END-IF
     IF mo-step(who-i) = 3
         MOVE 4 TO mo-frame(who-i)
         MOVE 7 TO mo-wait(who-i)
+        IF mo-name(who-i) = "SPOS" OR mo-name(who-i) = "CPOS"
+            OR mo-name(who-i) = "SSWV"
+            MOVE 9 TO mo-wait(who-i)
+        END-IF
+        EXIT PARAGRAPH
     END-IF
-    IF mo-step(who-i) >= 4
-        PERFORM go-chase
-    END-IF
+    PERFORM go-chase
     .
 
-imp-frame.
-    IF mo-step(who-i) = 1
-        MOVE 4 TO mo-frame(who-i)
-        MOVE 7 TO mo-wait(who-i)
-    END-IF
+imp-enter.
+    *> ATK2 FaceTarget wait 7; ATK3 TroopAttack wait 5 / SargAttack wait 7.
     IF mo-step(who-i) = 2
         MOVE 5 TO mo-frame(who-i)
         MOVE 7 TO mo-wait(who-i)
+        PERFORM face-player
+        MOVE 1 TO moved-out
+        EXIT PARAGRAPH
     END-IF
     IF mo-step(who-i) = 3
         MOVE 6 TO mo-frame(who-i)
+        *> TROO ATK3 tics=6 → wait 5; SARG ATK3 tics=8 → wait 7.
         MOVE 5 TO mo-wait(who-i)
+        IF mo-name(who-i) = "SARG"
+            MOVE 7 TO mo-wait(who-i)
+        END-IF
+        PERFORM face-player
+        MOVE 1 TO moved-out
         PERFORM imp-fire
+        EXIT PARAGRAPH
     END-IF
-    IF mo-step(who-i) >= 4
-        PERFORM go-chase
-    END-IF
+    PERFORM go-chase
     .
 
 zom-shot.
+    *> A_SPosAttack / A_SpidRefire: 3 pellets; A_PosAttack / A_CPosAttack: 1.
     MOVE 1 TO shot-k
-    IF mo-name(who-i) = "SPID"
+    IF mo-name(who-i) = "SPOS" OR mo-name(who-i) = "SPID"
         MOVE 3 TO shot-k
     END-IF
+    *> Sound once before the volley (Harbour/Node).
+    IF mo-name(who-i) = "CPOS" OR mo-name(who-i) = "SPID"
+        OR mo-name(who-i) = "SPOS"
+        MOVE "shotgn" TO snd-name
+    ELSE
+        MOVE "pistol" TO snd-name
+    END-IF
+    CALL "sfx-play" USING snd-name
+    *> One aim slope at the faced angle; every pellet keeps it.
+    MOVE who-i TO ray-slot
+    MOVE mo-ang(who-i) TO ray-ang
+    MOVE 1 TO ray-mode
+    CALL "gun-tic" USING bexp-a bexp-b bexp-c
+    MOVE 0 TO ray-nopuff
     PERFORM shot-k TIMES
         PERFORM zom-once
     END-PERFORM
     .
 
 zom-once.
-    IF mo-name(who-i) = "CPOS" OR mo-name(who-i) = "SPID"
-        MOVE "shotgn" TO snd-name
-    ELSE
-        MOVE "pistol" TO snd-name
-    END-IF
-    CALL "sfx-play" USING snd-name
+    *> Spread then damage RNG always (even on miss) — matches LineAttack args.
     MOVE mo-ang(who-i) TO tmp
     PERFORM take-rnd
     MOVE rnd-n TO rnd-a
@@ -595,12 +895,36 @@ zom-once.
     CALL "shl_i" USING BY VALUE rnd-a BY VALUE 20 RETURNING dx
     CALL "add_i32" USING BY VALUE tmp BY VALUE dx RETURNING tmp
     MOVE tmp TO shot-keep
+    PERFORM take-rnd
+    DIVIDE rnd-n BY 5 GIVING q-n REMAINDER rem-n
+    ADD 1 TO rem-n
+    MULTIPLY rem-n BY 3 GIVING dmg
     PERFORM ray-player
     .
 
 imp-fire.
     MOVE 655360 TO ball-spd
     MOVE 3 TO ball-mul
+    IF mo-name(who-i) = "SARG"
+        *> A_SargAttack: ((P_Random%10)+1)*4, only while still in melee range.
+        *> Out of range draws no RNG (demon/spectre has no missile).
+        PERFORM measure
+        *> P_CheckMeleeRange: 64-20 units plus the target radius.
+        *> A demon is wider than the player, so the bite reaches farther.
+        COMPUTE reach = 2883584 + aim-rad
+        IF dist-n < reach
+            MOVE 0 TO need-face
+            PERFORM can-see
+            IF see-ok = 1
+                PERFORM take-rnd
+                DIVIDE rnd-n BY 10 GIVING q-n REMAINDER rem-n
+                ADD 1 TO rem-n
+                MULTIPLY rem-n BY 4 GIVING dmg
+                PERFORM aim-hurt
+            END-IF
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
     IF mo-name(who-i) = "CYBR"
         PERFORM cyber-fire
         EXIT PARAGRAPH
@@ -622,14 +946,20 @@ imp-fire.
         EXIT PARAGRAPH
     END-IF
     PERFORM measure
-    IF mo-name(who-i) = "SKEL" AND dist-n < 4194304
+    *> P_CheckMeleeRange against whoever is the target. The player keeps
+    *> the old 64-unit test so a shot that already matched does not become a claw.
+    COMPUTE reach = 2883584 + aim-rad
+    IF mo-tgt(who-i) = 0
+        MOVE 4194304 TO reach
+    END-IF
+    IF mo-name(who-i) = "SKEL" AND dist-n < reach
         MOVE "skeswg" TO snd-name
         CALL "sfx-play" USING snd-name
         PERFORM take-rnd
         DIVIDE rnd-n BY 8 GIVING q-n REMAINDER rem-n
         ADD 1 TO rem-n
         MULTIPLY rem-n BY 6 GIVING dmg
-        PERFORM hurt-player
+        PERFORM aim-hurt
         EXIT PARAGRAPH
     END-IF
     IF mo-name(who-i) = "SKEL"
@@ -643,7 +973,7 @@ imp-fire.
         END-IF
         EXIT PARAGRAPH
     END-IF
-    IF cls-n = 3 OR dist-n < 4194304
+    IF dist-n < reach
         IF cls-n = 3
             MOVE "sgtatk" TO snd-name
         ELSE
@@ -658,7 +988,7 @@ imp-fire.
         ELSE
             MULTIPLY rem-n BY 3 GIVING dmg
         END-IF
-        PERFORM hurt-player
+        PERFORM aim-hurt
     ELSE
         MOVE "BAL1" TO ball-name
         IF cls-n = 4
@@ -677,38 +1007,84 @@ imp-fire.
     END-IF
     .
 
+aim-hurt.
+    *> Melee lands on the chase target. 0 is the player.
+    IF mo-tgt(who-i) > 0 AND mo-tgt(who-i) <= n-mobj
+        MOVE dmg TO hit-dmg
+        MOVE who-i TO hit-who
+        MOVE mo-tgt(who-i) TO hit-slot
+        MOVE 0 TO hit-from
+        CALL "gun-tic" USING bexp-a bexp-b bexp-c
+    ELSE
+        PERFORM hurt-player
+    END-IF
+    .
+
 hurt-player.
+    *> P_DamageMobj (player): thrust on full dmg, then armor, then hp.
     IF ply-god = 1 OR ply-inv > 0
         EXIT PARAGRAPH
     END-IF
-    IF ply-invis > 0
-        PERFORM take-rnd
-        IF rnd-n < 128
-            EXIT PARAGRAPH
+    *> Already dead: vanilla returns before touching attacker.
+    IF ply-hp > 0
+        *> Source, not the missile. A fireball's shooter is mo-count.
+        MOVE 0 TO ply-atk
+        IF who-i >= 1 AND who-i <= n-mobj
+            IF mo-kind(who-i) = 4
+                MOVE mo-count(who-i) TO ply-atk
+            ELSE
+                IF mo-kind(who-i) NOT = 5
+                    MOVE who-i TO ply-atk
+                END-IF
+            END-IF
+        END-IF
+        IF ply-atk < 1 OR ply-atk > n-mobj
+            MOVE 0 TO ply-atk
         END-IF
     END-IF
+    MOVE dmg TO shot-keep
     IF ply-skill = 0
         DIVIDE dmg BY 2 GIVING dmg
-    END-IF
-    SUBTRACT dmg FROM ply-hp
-    IF ply-hp < 0
-        MOVE 0 TO ply-hp
-    END-IF
-    ADD dmg TO ply-pain
-    IF ply-pain > 100
-        MOVE 100 TO ply-pain
+        MOVE dmg TO shot-keep
     END-IF
     MOVE 0 TO atk-on
     IF who-i >= 1 AND who-i <= n-mobj
         MOVE 1 TO atk-on
         MOVE mo-x(who-i) TO atk-x
         MOVE mo-y(who-i) TO atk-y
+        CALL "push-ply" USING shot-keep atk-x atk-y
+    END-IF
+    IF ply-atype > 0 AND ply-armor > 0
+        IF ply-atype = 1
+            DIVIDE dmg BY 3 GIVING m1
+        ELSE
+            DIVIDE dmg BY 2 GIVING m1
+        END-IF
+        IF m1 > ply-armor
+            MOVE ply-armor TO m1
+            MOVE 0 TO ply-atype
+        ELSE
+            IF m1 = ply-armor
+                MOVE 0 TO ply-atype
+            END-IF
+        END-IF
+        SUBTRACT m1 FROM ply-armor
+        SUBTRACT m1 FROM dmg
+    END-IF
+    IF dmg > 0
+        SUBTRACT dmg FROM ply-hp
+        IF ply-hp < 0
+            MOVE 0 TO ply-hp
+        END-IF
+        ADD dmg TO ply-pain
+        IF ply-pain > 100
+            MOVE 100 TO ply-pain
+        END-IF
     END-IF
     CALL "face-hit" USING dmg atk-on atk-x atk-y
     CALL "ply-ouch"
-    IF atk-on = 1
-        CALL "push-ply" USING dmg atk-x atk-y
-    END-IF
+    *> painOrWake: always consume P_Random (player painchance).
+    PERFORM take-rnd
     MOVE 1 TO moved-out
     .
 
@@ -786,83 +1162,99 @@ vile-fire.
     .
 
 spawn-ball.
-    IF n-mobj >= 768
-        EXIT PARAGRAPH
-    END-IF
     CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
     CALL "fine_sin_ang" USING BY VALUE mo-ang(who-i) RETURNING sn
-    CALL "fixed_mul" USING BY VALUE cs BY VALUE 2097152 RETURNING dx
-    CALL "fixed_mul" USING BY VALUE sn BY VALUE 2097152 RETURNING dy
-    ADD 1 TO n-mobj
-    CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE dx
-        RETURNING mo-x(n-mobj)
-    CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE dy
-        RETURNING mo-y(n-mobj)
+    CALL "alloc-mobj" USING born-i
+    IF born-i = 0
+        PERFORM take-rnd
+        PERFORM take-rnd
+        EXIT PARAGRAPH
+    END-IF
+    *> P_SpawnMissile: at the shooter, z+32. Not 32 units along the aim.
+    MOVE mo-x(who-i) TO mo-x(born-i)
+    MOVE mo-y(who-i) TO mo-y(born-i)
     CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE 2097152
-        RETURNING mo-z(n-mobj)
-    MOVE ball-name TO mo-name(n-mobj)
-    MOVE 32768 TO mo-frame(n-mobj)
-    MOVE 0 TO mo-flags(n-mobj)
-    MOVE 4 TO mo-kind(n-mobj)
-    MOVE 0 TO mo-ai(n-mobj)
-    MOVE 0 TO mo-step(n-mobj)
-    MOVE mo-ang(who-i) TO mo-ang(n-mobj)
-    MOVE 1048576 TO mo-h(n-mobj)
-    MOVE 393216 TO mo-rad(n-mobj)
+        RETURNING mo-z(born-i)
+    MOVE ball-name TO mo-name(born-i)
+    MOVE 32768 TO mo-frame(born-i)
+    MOVE 0 TO mo-flags(born-i)
+    MOVE 4 TO mo-kind(born-i)
+    MOVE 0 TO mo-ai(born-i)
+    MOVE 0 TO mo-step(born-i)
+    MOVE mo-ang(who-i) TO mo-ang(born-i)
+    MOVE 1048576 TO mo-h(born-i)
+    MOVE 393216 TO mo-rad(born-i)
     CALL "fixed_mul" USING BY VALUE ball-spd BY VALUE cs
-        RETURNING mo-mx(n-mobj)
+        RETURNING mo-mx(born-i)
     CALL "fixed_mul" USING BY VALUE ball-spd BY VALUE sn
-        RETURNING mo-my(n-mobj)
+        RETURNING mo-my(born-i)
     PERFORM measure
-    CALL "shar32" USING BY VALUE dist-n BY VALUE 16 RETURNING units
+    IF ball-spd = 0
+        MOVE 1 TO units
+    ELSE
+        DIVIDE dist-n BY ball-spd GIVING units
+    END-IF
     IF units < 1
         MOVE 1 TO units
     END-IF
-    CALL "add_i32" USING BY VALUE ply-z BY VALUE 2097152 RETURNING tmp
-    CALL "sub_i32" USING BY VALUE tmp BY VALUE mo-z(n-mobj)
+    *> momz = (target.z - source.z) / steps. Damage die is info.damage, rolled on impact.
+    CALL "sub_i32" USING BY VALUE aim-z BY VALUE mo-z(who-i)
         RETURNING tmp
-    DIVIDE tmp BY units GIVING dx
-    CALL "mul_i32" USING BY VALUE dx BY VALUE 10 RETURNING mo-mz(n-mobj)
+    DIVIDE tmp BY units GIVING mo-mz(born-i)
+    MOVE ball-mul TO mo-hp(born-i)
+    *> PIT_CheckThing skips the shooter (tmthing->target).
+    MOVE who-i TO mo-count(born-i)
+    *> spawnMobj lastlook, then P_CheckMissileSpawn (tics jitter + half-mom nudge).
     PERFORM take-rnd
-    DIVIDE rnd-n BY 8 GIVING q-n REMAINDER rem-n
-    ADD 1 TO rem-n
-    MULTIPLY rem-n BY ball-mul GIVING mo-hp(n-mobj)
+    CALL "bit_and" USING BY VALUE rnd-n BY VALUE 3
+        RETURNING mo-look(born-i)
+    PERFORM take-rnd
+    CALL "shar32" USING BY VALUE mo-mx(born-i) BY VALUE 1 RETURNING dx
+    CALL "add_i32" USING BY VALUE mo-x(born-i) BY VALUE dx
+        RETURNING mo-x(born-i)
+    CALL "shar32" USING BY VALUE mo-my(born-i) BY VALUE 1 RETURNING dy
+    CALL "add_i32" USING BY VALUE mo-y(born-i) BY VALUE dy
+        RETURNING mo-y(born-i)
+    CALL "shar32" USING BY VALUE mo-mz(born-i) BY VALUE 1 RETURNING tmp
+    CALL "add_i32" USING BY VALUE mo-z(born-i) BY VALUE tmp
+        RETURNING mo-z(born-i)
     MOVE 1 TO moved-out
     .
 
 spawn-soul.
-    IF n-mobj >= 768
-        EXIT PARAGRAPH
-    END-IF
     CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
     CALL "fine_sin_ang" USING BY VALUE mo-ang(who-i) RETURNING sn
     CALL "fixed_mul" USING BY VALUE cs BY VALUE 2097152 RETURNING dx
     CALL "fixed_mul" USING BY VALUE sn BY VALUE 2097152 RETURNING dy
-    ADD 1 TO n-mobj
+    CALL "alloc-mobj" USING born-i
+    IF born-i = 0
+        EXIT PARAGRAPH
+    END-IF
     CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE dx
-        RETURNING mo-x(n-mobj)
+        RETURNING mo-x(born-i)
     CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE dy
-        RETURNING mo-y(n-mobj)
-    MOVE mo-z(who-i) TO mo-z(n-mobj)
-    MOVE "SKUL" TO mo-name(n-mobj)
-    MOVE 0 TO mo-frame(n-mobj)
-    MOVE 4194310 TO mo-flags(n-mobj)
-    MOVE 0 TO mo-kind(n-mobj)
-    MOVE 4 TO mo-ai(n-mobj)
-    MOVE 0 TO mo-step(n-mobj)
-    MOVE 0 TO mo-seq(n-mobj)
-    MOVE 0 TO mo-tic(n-mobj)
-    MOVE 0 TO mo-count(n-mobj)
-    MOVE 8 TO mo-dir(n-mobj)
-    MOVE 0 TO mo-wait(n-mobj)
-    MOVE mo-ang(who-i) TO mo-ang(n-mobj)
-    MOVE 3670016 TO mo-h(n-mobj)
-    MOVE 1048576 TO mo-rad(n-mobj)
-    MOVE 100 TO mo-hp(n-mobj)
-    MOVE 100 TO mo-max(n-mobj)
-    MOVE 0 TO mo-mx(n-mobj)
-    MOVE 0 TO mo-my(n-mobj)
-    MOVE 0 TO mo-mz(n-mobj)
+        RETURNING mo-y(born-i)
+    MOVE mo-z(who-i) TO mo-z(born-i)
+    MOVE "SKUL" TO mo-name(born-i)
+    MOVE 0 TO mo-frame(born-i)
+    *> SOLID|SHOOTABLE|COUNTKILL plus FLOAT|NOGRAVITY (not snapped to the floor).
+    MOVE 4212742 TO mo-flags(born-i)
+    MOVE 0 TO mo-kind(born-i)
+    MOVE 4 TO mo-ai(born-i)
+    MOVE 0 TO mo-step(born-i)
+    MOVE 0 TO mo-seq(born-i)
+    MOVE 0 TO mo-tic(born-i)
+    MOVE 0 TO mo-count(born-i)
+    MOVE 0 TO mo-dir(born-i)
+    MOVE 0 TO mo-wait(born-i)
+    MOVE mo-ang(who-i) TO mo-ang(born-i)
+    MOVE 3670016 TO mo-h(born-i)
+    MOVE 1048576 TO mo-rad(born-i)
+    MOVE 100 TO mo-hp(born-i)
+    MOVE 100 TO mo-max(born-i)
+    MOVE 0 TO mo-mx(born-i)
+    MOVE 0 TO mo-my(born-i)
+    MOVE 0 TO mo-mz(born-i)
     MOVE 1 TO moved-out
     .
 
@@ -877,46 +1269,119 @@ skul-one.
     END-IF
     MOVE 1 TO moved-out
     IF mo-ai(who-i) = 0
+        IF mo-wait(who-i) > 0
+            SUBTRACT 1 FROM mo-wait(who-i)
+            EXIT PARAGRAPH
+        END-IF
         MOVE 1 TO need-face
         PERFORM can-see
         IF see-ok = 1
             MOVE "sklatk" TO snd-name
             CALL "sfx-play" USING snd-name
             MOVE 4 TO mo-ai(who-i)
+            PERFORM skull-charge
+        ELSE
+            PERFORM float-z
         END-IF
         EXIT PARAGRAPH
     END-IF
-    CALL "point_to_angle" USING
-        BY VALUE mo-x(who-i) BY VALUE mo-y(who-i)
-        BY VALUE ply-x BY VALUE ply-y
-        RETURNING mo-ang(who-i)
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16777216
+        RETURNING bit-n
+    IF bit-n = 0
+        PERFORM skull-charge
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM skull-z
+    *> P_XYMovement: mom already cleared means the charge slammed into something.
+    IF mo-mx(who-i) = 0 AND mo-my(who-i) = 0
+        PERFORM skull-stop
+        EXIT PARAGRAPH
+    END-IF
+    *> S_SKULL_ATK is 22 tics. Resetting mom every tic would erase knockback.
+    IF mo-wait(who-i) > 0
+        SUBTRACT 1 FROM mo-wait(who-i)
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM skull-charge
+    .
+
+skull-charge.
+    *> A_SkullAttack: MF_SKULLFLY and SKULLSPEED toward the target.
+    CALL "bit_or" USING BY VALUE mo-flags(who-i) BY VALUE 16777216
+        RETURNING mo-flags(who-i)
+    PERFORM face-player
     CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
     CALL "fine_sin_ang" USING BY VALUE mo-ang(who-i) RETURNING sn
-    CALL "fixed_mul" USING BY VALUE 1310720 BY VALUE cs RETURNING tdx
-    CALL "fixed_mul" USING BY VALUE 1310720 BY VALUE sn RETURNING tdy
-    CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE tdx RETURNING nx
-    CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE tdy RETURNING ny
-    PERFORM spot-free
-    IF step-ok = 1
-        MOVE nx TO mo-x(who-i)
-        MOVE ny TO mo-y(who-i)
-        MOVE 1 TO moved-out
-    ELSE
-        PERFORM measure
-        IF dist-n < 4194304
+    CALL "fixed_mul" USING BY VALUE 1310720 BY VALUE cs
+        RETURNING mo-mx(who-i)
+    CALL "fixed_mul" USING BY VALUE 1310720 BY VALUE sn
+        RETURNING mo-my(who-i)
+    PERFORM measure
+    DIVIDE dist-n BY 1310720 GIVING units
+    IF units < 1
+        MOVE 1 TO units
+    END-IF
+    DIVIDE aim-h BY 2 GIVING tmp
+    CALL "add_i32" USING BY VALUE aim-z BY VALUE tmp RETURNING tmp
+    CALL "sub_i32" USING BY VALUE tmp BY VALUE mo-z(who-i) RETURNING tmp
+    DIVIDE tmp BY units GIVING mo-mz(who-i)
+    MOVE 21 TO mo-wait(who-i)
+    .
+
+skull-z.
+    MOVE mo-x(who-i) TO walk-x
+    MOVE mo-y(who-i) TO walk-y
+    PERFORM locate-sec
+    IF sec-slot < 1 OR sec-slot > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE mo-mz(who-i)
+        RETURNING mo-z(who-i)
+    IF mo-z(who-i) <= sec-floor-h(sec-slot)
+        MOVE sec-floor-h(sec-slot) TO mo-z(who-i)
+        MOVE 0 TO mo-mz(who-i)
+    END-IF
+    CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE mo-h(who-i)
+        RETURNING tmp
+    IF tmp > sec-ceil-h(sec-slot)
+        CALL "sub_i32" USING BY VALUE sec-ceil-h(sec-slot)
+            BY VALUE mo-h(who-i) RETURNING mo-z(who-i)
+        MOVE 0 TO mo-mz(who-i)
+    END-IF
+    .
+
+skull-hit.
+    IF ply-hp > 0
+        CALL "sub_i32" USING BY VALUE nx BY VALUE ply-x RETURNING dx
+        CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
+        CALL "sub_i32" USING BY VALUE ny BY VALUE ply-y RETURNING dy
+        CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
+        CALL "add_i32" USING BY VALUE mo-rad(who-i) BY VALUE ply-rad
+            RETURNING reach
+        IF dx < reach AND dy < reach
             PERFORM take-rnd
             DIVIDE rnd-n BY 8 GIVING q-n REMAINDER rem-n
             ADD 1 TO rem-n
             MULTIPLY rem-n BY 3 GIVING dmg
             PERFORM hurt-player
         END-IF
-        MOVE 0 TO mo-ai(who-i)
     END-IF
-    PERFORM float-z
+    PERFORM skull-stop
+    .
+
+skull-stop.
+    CALL "bit_xor" USING BY VALUE mo-flags(who-i) BY VALUE 16777216
+        RETURNING mo-flags(who-i)
+    MOVE 0 TO mo-mx(who-i)
+    MOVE 0 TO mo-my(who-i)
+    MOVE 0 TO mo-mz(who-i)
+    MOVE 0 TO mo-ai(who-i)
+    MOVE 10 TO mo-wait(who-i)
     .
 
 float-z.
-    CALL "add_i32" USING BY VALUE ply-z BY VALUE 2097152 RETURNING tmp
+    PERFORM load-aim
+    CALL "add_i32" USING BY VALUE aim-z BY VALUE 2097152 RETURNING tmp
     CALL "sub_i32" USING BY VALUE tmp BY VALUE mo-z(who-i) RETURNING dx
     IF dx > 262144
         CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE 262144
@@ -974,7 +1439,7 @@ vile-raise.
                 MOVE 0 TO mo-tic(foe-j)
                 MOVE 0 TO mo-step(foe-j)
                 MOVE 8 TO mo-wait(foe-j)
-                MOVE 8 TO mo-dir(foe-j)
+                MOVE 0 TO mo-dir(foe-j)
                 CALL "mul_i32" USING BY VALUE mo-h(foe-j) BY VALUE 4
                     RETURNING mo-h(foe-j)
                 MOVE "slop" TO snd-name
@@ -1008,12 +1473,20 @@ fly-ball.
     PERFORM ball-hit
     IF blocked = 1
         IF hurt-pl = 1
-            MOVE mo-hp(who-i) TO dmg
+            PERFORM take-rnd
+            DIVIDE rnd-n BY 8 GIVING q-n REMAINDER rem-n
+            ADD 1 TO rem-n
+            MULTIPLY rem-n BY mo-hp(who-i) GIVING dmg
             PERFORM hurt-player
         END-IF
         MOVE 9 TO mo-ai(who-i)
         MOVE 32770 TO mo-frame(who-i)
-        MOVE 6 TO mo-wait(who-i)
+        *> P_ExplodeMissile: death tics -= P_Random&3, then this thinker
+        *> decrements once. boom-tic advances the tic after wait hits 0,
+        *> so wait = (6 - jitter) - 2.
+        PERFORM take-rnd
+        CALL "bit_and" USING BY VALUE rnd-n BY VALUE 3 RETURNING rem-n
+        COMPUTE mo-wait(who-i) = 4 - rem-n
         MOVE 0 TO mo-mx(who-i)
         MOVE 0 TO mo-my(who-i)
         MOVE 0 TO mo-mz(who-i)
@@ -1087,6 +1560,10 @@ ball-hit.
             END-IF
         END-IF
     END-IF
+    PERFORM ball-things
+    IF blocked = 1
+        EXIT PARAGRAPH
+    END-IF
     MOVE mo-x(who-i) TO ox
     MOVE mo-y(who-i) TO oy
     CALL "sub_i32" USING BY VALUE nx BY VALUE ox RETURNING tdx
@@ -1111,77 +1588,131 @@ ball-hit.
     END-PERFORM
     .
 
-ray-player.
-    MOVE mo-x(who-i) TO ox
-    MOVE mo-y(who-i) TO oy
-    CALL "fine_cos_ang" USING BY VALUE shot-keep RETURNING cs
-    CALL "fine_sin_ang" USING BY VALUE shot-keep RETURNING sn
-    CALL "mul_i32" USING BY VALUE cs BY VALUE 2048 RETURNING tdx
-    CALL "mul_i32" USING BY VALUE sn BY VALUE 2048 RETURNING tdy
-    MOVE 999999 TO wall-fr
-    PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line
-        PERFORM cross-one
-        IF did-cross = 1 AND frac > 0 AND frac < wall-fr
-            PERFORM open-of
-            IF two-side = 0 OR op-bot >= op-top
-                MOVE frac TO wall-fr
+ball-things.
+    *> PIT_CheckThing: missile vs monsters at the destination, before lines.
+    PERFORM VARYING foe-j FROM 1 BY 1
+        UNTIL foe-j > n-mobj OR blocked = 1
+        IF foe-j NOT = who-i AND foe-j NOT = mo-count(who-i)
+            CALL "bit_and" USING BY VALUE mo-flags(foe-j) BY VALUE 7
+                RETURNING bit-n
+            IF bit-n NOT = 0
+                PERFORM ball-one
             END-IF
         END-IF
     END-PERFORM
-    MOVE 0 TO ply-fr
-    CALL "sub_i32" USING BY VALUE ply-x BY VALUE ox RETURNING wx
-    CALL "sub_i32" USING BY VALUE ply-y BY VALUE oy RETURNING wy
-    CALL "fixed_mul" USING BY VALUE wx BY VALUE cs RETURNING along
-    CALL "fixed_mul" USING BY VALUE wy BY VALUE sn RETURNING tmp
-    CALL "add_i32" USING BY VALUE along BY VALUE tmp RETURNING along
-    IF along > 0
-        CALL "fixed_mul" USING BY VALUE wx BY VALUE sn RETURNING dx
-        CALL "fixed_mul" USING BY VALUE wy BY VALUE cs RETURNING dy
-        CALL "sub_i32" USING BY VALUE dx BY VALUE dy RETURNING dx
-        CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
-        CALL "add_i32" USING BY VALUE ply-rad BY VALUE 262144
-            RETURNING reach
-        IF dx < reach
-            DIVIDE along BY 2048 GIVING ply-fr
+    .
+
+ball-one.
+    CALL "sub_i32" USING BY VALUE nx BY VALUE mo-x(foe-j) RETURNING dx
+    CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
+    CALL "sub_i32" USING BY VALUE ny BY VALUE mo-y(foe-j) RETURNING dy
+    CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
+    CALL "add_i32" USING BY VALUE mo-rad(foe-j) BY VALUE mo-rad(who-i)
+        RETURNING reach
+    IF dx >= reach OR dy >= reach
+        EXIT PARAGRAPH
+    END-IF
+    *> Current z (momz is applied only after a clear move).
+    CALL "add_i32" USING BY VALUE mo-z(foe-j) BY VALUE mo-h(foe-j)
+        RETURNING tmp
+    IF mo-z(who-i) > tmp
+        EXIT PARAGRAPH
+    END-IF
+    CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE mo-h(who-i)
+        RETURNING tmp
+    IF tmp < mo-z(foe-j)
+        EXIT PARAGRAPH
+    END-IF
+    IF mo-count(who-i) > 0
+        MOVE mo-count(who-i) TO own-n
+        IF mo-name(own-n) = mo-name(foe-j)
+            OR (mo-name(own-n) = "BOSS" AND mo-name(foe-j) = "BOS2")
+            OR (mo-name(own-n) = "BOS2" AND mo-name(foe-j) = "BOSS")
+            MOVE 1 TO blocked
+            EXIT PARAGRAPH
         END-IF
     END-IF
-    IF ply-fr > 0 AND ply-fr < wall-fr
-        PERFORM take-rnd
-        DIVIDE rnd-n BY 5 GIVING q-n REMAINDER rem-n
-        ADD 1 TO rem-n
-        MULTIPLY rem-n BY 3 GIVING dmg
-        PERFORM hurt-player
-    ELSE
-        IF wall-fr < 65536
-            PERFORM puff-at
+    CALL "bit_and" USING BY VALUE mo-flags(foe-j) BY VALUE 4
+        RETURNING bit-n
+    IF bit-n = 0
+        CALL "bit_and" USING BY VALUE mo-flags(foe-j) BY VALUE 2
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO blocked
         END-IF
+        EXIT PARAGRAPH
+    END-IF
+    MOVE foe-j TO hit-slot
+    MOVE who-i TO hit-from
+    CALL "gun-tic" USING bexp-a bexp-b bexp-c
+    MOVE 1 TO blocked
+    .
+
+ray-player.
+    *> Same diagonal + slope as P_LineAttack. gun-tic only reports the hit.
+    MOVE who-i TO ray-slot
+    MOVE shot-keep TO ray-ang
+    MOVE 2 TO ray-mode
+    CALL "gun-tic" USING bexp-a bexp-b bexp-c
+    IF ray-hit = 1
+        *> Blood randoms before P_DamageMobj (pain / kill).
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+        MOVE dmg TO hit-dmg
+        MOVE who-i TO hit-who
+        MOVE ray-mo TO hit-slot
+        MOVE 0 TO hit-from
+        CALL "gun-tic" USING bexp-a bexp-b bexp-c
+        EXIT PARAGRAPH
+    END-IF
+    IF ray-hit = 2
+        PERFORM hurt-player
+        *> P_SpawnBlood: (R-R)*1024, spawnMobj lastlook, tics-=R&3.
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+        EXIT PARAGRAPH
+    END-IF
+    IF ray-hit = 3
+        PERFORM puff-at
+        *> P_SpawnPuff: (R-R)*1024, spawnMobj lastlook, tics-=R&3.
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+        PERFORM take-rnd
+    ELSE
+        ADD 1 TO ray-nopuff
     END-IF
     .
 
 puff-at.
-    IF n-mobj >= 768
-        EXIT PARAGRAPH
-    END-IF
     CALL "fixed_mul" USING BY VALUE tdx BY VALUE wall-fr RETURNING nx
     CALL "add_i32" USING BY VALUE ox BY VALUE nx RETURNING nx
     CALL "fixed_mul" USING BY VALUE tdy BY VALUE wall-fr RETURNING ny
     CALL "add_i32" USING BY VALUE oy BY VALUE ny RETURNING ny
-    ADD 1 TO n-mobj
-    MOVE nx TO mo-x(n-mobj)
-    MOVE ny TO mo-y(n-mobj)
+    CALL "alloc-mobj" USING born-i
+    IF born-i = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE nx TO mo-x(born-i)
+    MOVE ny TO mo-y(born-i)
     CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE 2097152
-        RETURNING mo-z(n-mobj)
-    MOVE "PUFF" TO mo-name(n-mobj)
-    MOVE 32768 TO mo-frame(n-mobj)
-    MOVE 0 TO mo-flags(n-mobj)
-    MOVE 1 TO mo-kind(n-mobj)
-    MOVE 4 TO mo-tic(n-mobj)
-    MOVE 0 TO mo-ai(n-mobj)
-    MOVE 0 TO mo-step(n-mobj)
+        RETURNING mo-z(born-i)
+    MOVE "PUFF" TO mo-name(born-i)
+    MOVE 32768 TO mo-frame(born-i)
+    MOVE 0 TO mo-flags(born-i)
+    MOVE 1 TO mo-kind(born-i)
+    MOVE 4 TO mo-tic(born-i)
+    MOVE 0 TO mo-ai(born-i)
+    MOVE 0 TO mo-step(born-i)
     MOVE 1 TO moved-out
     .
 
 new-dir.
+    PERFORM load-aim
     MOVE mo-dir(who-i) TO old-d
     MOVE 8 TO turn-d
     IF old-d >= 0 AND old-d <= 7
@@ -1190,10 +1721,13 @@ new-dir.
             SUBTRACT 8 FROM turn-d
         END-IF
     END-IF
-    CALL "sub_i32" USING BY VALUE ply-x BY VALUE mo-x(who-i)
+    CALL "sub_i32" USING BY VALUE aim-x BY VALUE mo-x(who-i)
         RETURNING dx
-    CALL "sub_i32" USING BY VALUE ply-y BY VALUE mo-y(who-i)
+    CALL "sub_i32" USING BY VALUE aim-y BY VALUE mo-y(who-i)
         RETURNING dy
+    *> try-step reuses dx/dy. Keep the target deltas for the axis swap.
+    CALL "abs_fixed_i" USING BY VALUE dx RETURNING m1
+    CALL "abs_fixed_i" USING BY VALUE dy RETURNING m2
     MOVE 8 TO d2
     MOVE 8 TO d3
     IF dx > 655360
@@ -1230,8 +1764,6 @@ new-dir.
             END-IF
         END-IF
     END-IF
-    CALL "abs_fixed_i" USING BY VALUE dx RETURNING m1
-    CALL "abs_fixed_i" USING BY VALUE dy RETURNING m2
     PERFORM take-rnd
     IF rnd-n > 200 OR m2 > m1
         MOVE d2 TO tmp
@@ -1268,10 +1800,11 @@ new-dir.
             EXIT PARAGRAPH
         END-IF
     END-IF
+    *> Vanilla/Node: (P_Random & 1) != 0 → east..SE; else SE..east.
     PERFORM take-rnd
     CALL "bit_and" USING BY VALUE rnd-n BY VALUE 1 RETURNING scan-i
     IF scan-i = 0
-        PERFORM VARYING scan-i FROM 0 BY 1 UNTIL scan-i > 7
+        PERFORM VARYING scan-i FROM 7 BY -1 UNTIL scan-i < 0
             IF scan-i NOT = turn-d
                 MOVE scan-i TO pick
                 PERFORM try-pick
@@ -1282,7 +1815,7 @@ new-dir.
             END-IF
         END-PERFORM
     ELSE
-        PERFORM VARYING scan-i FROM 7 BY -1 UNTIL scan-i < 0
+        PERFORM VARYING scan-i FROM 0 BY 1 UNTIL scan-i > 7
             IF scan-i NOT = turn-d
                 MOVE scan-i TO pick
                 PERFORM try-pick
@@ -1301,8 +1834,8 @@ new-dir.
             EXIT PARAGRAPH
         END-IF
     END-IF
+    *> Vanilla P_NewChaseDir: stuck — DI_NODIR, leave movecount alone (no RNG).
     MOVE 8 TO mo-dir(who-i)
-    PERFORM hold-dir
     .
 
 hold-dir.
@@ -1317,6 +1850,7 @@ try-pick.
     .
 
 try-step.
+    *> P_Move (Python _move): TryMove; else float step; else spechit useSpecial.
     MOVE 0 TO step-ok
     IF mo-dir(who-i) < 0 OR mo-dir(who-i) > 7
         EXIT PARAGRAPH
@@ -1327,32 +1861,233 @@ try-step.
     CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE tdx RETURNING nx
     CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE tdy RETURNING ny
     PERFORM spot-free
-    IF step-ok = 0
+    IF step-ok = 1
+        MOVE mo-x(who-i) TO ox
+        MOVE mo-y(who-i) TO oy
+        MOVE nx TO mo-x(who-i)
+        MOVE ny TO mo-y(who-i)
+        *> Clear MF_INFLOAT (0x200000) on successful TryMove.
+        CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 2097152
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            CALL "bit_xor" USING BY VALUE mo-flags(who-i) BY VALUE 2097152
+                RETURNING mo-flags(who-i)
+        END-IF
+        *> MF_FLOAT = 0x4000 — floaters keep z.
+        CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16384
+            RETURNING bit-n
+        IF bit-n = 0
+            MOVE floor-z TO mo-z(who-i)
+        END-IF
+        PERFORM mon-cross-ok
+        MOVE 1 TO moved-out
         EXIT PARAGRAPH
     END-IF
-    MOVE nx TO mo-x(who-i)
-    MOVE ny TO mo-y(who-i)
-    MOVE nx TO walk-x
-    MOVE ny TO walk-y
-    PERFORM locate-sec
-    IF sec-slot >= 1 AND sec-slot <= n-sector
-        MOVE sec-floor-h(sec-slot) TO mo-z(who-i)
+    *> Float: opening tall enough (floatok) but step/ceil blocked → nudge Z.
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16384
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        CALL "sub_i32" USING BY VALUE ceil-z BY VALUE floor-z
+            RETURNING tmp
+        IF tmp >= mo-h(who-i)
+            IF mo-z(who-i) < floor-z
+                ADD 262144 TO mo-z(who-i)
+            ELSE
+                SUBTRACT 262144 FROM mo-z(who-i)
+            END-IF
+            CALL "bit_or" USING BY VALUE mo-flags(who-i) BY VALUE 2097152
+                RETURNING mo-flags(who-i)
+            MOVE 1 TO step-ok
+            MOVE 1 TO moved-out
+            EXIT PARAGRAPH
+        END-IF
     END-IF
-    MOVE 1 TO step-ok
-    MOVE 1 TO moved-out
+    *> Spechit: Harbour only sets DI_NODIR when lastSpechit is non-empty.
+    *> Empty spechit must keep movedir so P_NewChaseDir opposite/turn is right.
+    IF n-spechit < 1
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 8 TO mo-dir(who-i)
+    PERFORM mon-open-spechit
+    IF opened-n = 1
+        MOVE 1 TO step-ok
+        MOVE 1 TO moved-out
+    END-IF
+    .
+
+mon-xy-move.
+    *> P_XYMovement for non-player (no slide; zero mom on block).
+    IF mo-mx(who-i) > 1966080
+        MOVE 1966080 TO mo-mx(who-i)
+    END-IF
+    IF mo-mx(who-i) < -1966080
+        MOVE -1966080 TO mo-mx(who-i)
+    END-IF
+    IF mo-my(who-i) > 1966080
+        MOVE 1966080 TO mo-my(who-i)
+    END-IF
+    IF mo-my(who-i) < -1966080
+        MOVE -1966080 TO mo-my(who-i)
+    END-IF
+    MOVE mo-mx(who-i) TO xmove-n
+    MOVE mo-my(who-i) TO ymove-n
+    PERFORM UNTIL xmove-n = 0 AND ymove-n = 0
+        IF xmove-n > 983040 OR ymove-n > 983040
+            CALL "trunc2_i32" USING BY VALUE xmove-n RETURNING tmp
+            CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE tmp
+                RETURNING nx
+            CALL "trunc2_i32" USING BY VALUE ymove-n RETURNING tmp
+            CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE tmp
+                RETURNING ny
+            CALL "trunc2_i32" USING BY VALUE xmove-n RETURNING xmove-n
+            CALL "trunc2_i32" USING BY VALUE ymove-n RETURNING ymove-n
+        ELSE
+            CALL "add_i32" USING BY VALUE mo-x(who-i) BY VALUE xmove-n
+                RETURNING nx
+            CALL "add_i32" USING BY VALUE mo-y(who-i) BY VALUE ymove-n
+                RETURNING ny
+            MOVE 0 TO xmove-n
+            MOVE 0 TO ymove-n
+        END-IF
+        PERFORM spot-free
+        IF step-ok = 1
+            MOVE mo-x(who-i) TO ox
+            MOVE mo-y(who-i) TO oy
+            MOVE nx TO mo-x(who-i)
+            MOVE ny TO mo-y(who-i)
+            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16384
+                RETURNING bit-n
+            IF bit-n = 0
+                MOVE floor-z TO mo-z(who-i)
+            END-IF
+            PERFORM mon-cross-ok
+            MOVE 1 TO moved-out
+        ELSE
+            MOVE 0 TO mo-mx(who-i)
+            MOVE 0 TO mo-my(who-i)
+            MOVE 0 TO xmove-n
+            MOVE 0 TO ymove-n
+            *> PIT_CheckThing skull: the charge stops on the thing it hit.
+            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16777216
+                RETURNING bit-n
+            IF bit-n NOT = 0
+                PERFORM skull-hit
+            END-IF
+        END-IF
+    END-PERFORM
+    *> No friction while MF_SKULLFLY. A hit must replace the charge mom.
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 16777216
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        EXIT PARAGRAPH
+    END-IF
+    *> Friction on the floor (STOPSPEED 4096, FRICTION 0xe800).
+    *> Vanilla tests z against the thing's floorz (highest floor under the
+    *> body). The sector under the center is lower while the body is still
+    *> on the lip, and that made a sliding demon skip friction.
+    IF mo-hp(who-i) > 0
+        IF mo-z(who-i) > floor-z
+            EXIT PARAGRAPH
+        END-IF
+    ELSE
+        MOVE mo-x(who-i) TO walk-x
+        MOVE mo-y(who-i) TO walk-y
+        PERFORM locate-sec
+        IF sec-slot >= 1 AND sec-slot <= n-sector
+            IF mo-z(who-i) > sec-floor-h(sec-slot)
+                EXIT PARAGRAPH
+            END-IF
+        END-IF
+    END-IF
+    CALL "abs_fixed_i" USING BY VALUE mo-mx(who-i) RETURNING m1
+    CALL "abs_fixed_i" USING BY VALUE mo-my(who-i) RETURNING m2
+    IF m1 < 4096 AND m2 < 4096
+        MOVE 0 TO mo-mx(who-i)
+        MOVE 0 TO mo-my(who-i)
+    ELSE
+        CALL "fixed_mul" USING BY VALUE mo-mx(who-i) BY VALUE 59392
+            RETURNING mo-mx(who-i)
+        CALL "fixed_mul" USING BY VALUE mo-my(who-i) BY VALUE 59392
+            RETURNING mo-my(who-i)
+    END-IF
     .
 
 spot-free.
+    *> P_CheckPosition + P_TryMove gates (Python collision.try_move).
+    *> Same bbox / P_BoxOnLineSide path as walk-tic try-spot (not ray-cross).
+    MOVE 0 TO step-ok
+    MOVE 0 TO n-spechit
+    CALL "sub_i32" USING BY VALUE nx BY VALUE mo-rad(who-i)
+        RETURNING box-l
+    CALL "add_i32" USING BY VALUE nx BY VALUE mo-rad(who-i)
+        RETURNING box-r
+    CALL "sub_i32" USING BY VALUE ny BY VALUE mo-rad(who-i)
+        RETURNING box-b
+    CALL "add_i32" USING BY VALUE ny BY VALUE mo-rad(who-i)
+        RETURNING box-t
+    MOVE nx TO walk-x
+    MOVE ny TO walk-y
+    PERFORM locate-sec
+    IF sec-slot < 1 OR sec-slot > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    MOVE sec-floor-h(sec-slot) TO floor-z
+    MOVE floor-z TO drop-z
+    MOVE sec-ceil-h(sec-slot) TO ceil-z
+    PERFORM mon-pit-things
+    IF step-ok = 0
+        EXIT PARAGRAPH
+    END-IF
     MOVE 1 TO step-ok
-    CALL "sub_i32" USING BY VALUE nx BY VALUE ply-x RETURNING dx
-    CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
-    CALL "sub_i32" USING BY VALUE ny BY VALUE ply-y RETURNING dy
-    CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
-    CALL "add_i32" USING BY VALUE mo-rad(who-i) BY VALUE ply-rad
-        RETURNING reach
-    IF dx < reach AND dy < reach AND ply-hp > 0
+    PERFORM mon-pit-lines
+    IF step-ok = 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE ceil-z BY VALUE floor-z RETURNING tmp
+    IF tmp < mo-h(who-i)
         MOVE 0 TO step-ok
         EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE ceil-z BY VALUE mo-z(who-i)
+        RETURNING tmp
+    IF tmp < mo-h(who-i)
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE floor-z BY VALUE mo-z(who-i)
+        RETURNING tmp
+    IF tmp > 1572864
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    *> dropoff unless MF_DROPOFF (0x400) | MF_FLOAT (0x4000).
+    CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 17408
+        RETURNING bit-n
+    IF bit-n = 0
+        CALL "sub_i32" USING BY VALUE floor-z BY VALUE drop-z
+            RETURNING tmp
+        IF tmp > 1572864
+            MOVE 0 TO step-ok
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    MOVE 1 TO step-ok
+    .
+
+mon-pit-things.
+    *> PIT_CheckThing solid (player is separate; not in mo-list).
+    MOVE 1 TO step-ok
+    IF ply-hp > 0
+        CALL "sub_i32" USING BY VALUE nx BY VALUE ply-x RETURNING dx
+        CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
+        CALL "sub_i32" USING BY VALUE ny BY VALUE ply-y RETURNING dy
+        CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
+        CALL "add_i32" USING BY VALUE mo-rad(who-i) BY VALUE ply-rad
+            RETURNING reach
+        IF dx < reach AND dy < reach
+            MOVE 0 TO step-ok
+            EXIT PARAGRAPH
+        END-IF
     END-IF
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-mobj OR step-ok = 0
         IF li NOT = who-i
@@ -1373,82 +2108,369 @@ spot-free.
             END-IF
         END-IF
     END-PERFORM
-    IF step-ok = 0
+    .
+
+mon-pit-lines.
+    IF blk-w < 1 OR blk-h < 1
         EXIT PARAGRAPH
     END-IF
-    MOVE mo-x(who-i) TO ox
-    MOVE mo-y(who-i) TO oy
-    PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR step-ok = 0
-        PERFORM cross-one
-        IF did-cross = 0
-            PERFORM ball-near
+    CALL "sub_i32" USING BY VALUE box-l BY VALUE blk-org-x RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 23 RETURNING xl
+    CALL "sub_i32" USING BY VALUE box-r BY VALUE blk-org-x RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 23 RETURNING xh
+    CALL "sub_i32" USING BY VALUE box-b BY VALUE blk-org-y RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 23 RETURNING yl
+    CALL "sub_i32" USING BY VALUE box-t BY VALUE blk-org-y RETURNING tmp
+    CALL "shar32" USING BY VALUE tmp BY VALUE 23 RETURNING yh
+    ADD 1 TO seen-gen
+    PERFORM VARYING bx FROM xl BY 1 UNTIL bx > xh OR step-ok = 0
+        PERFORM VARYING by-n FROM yl BY 1 UNTIL by-n > yh OR step-ok = 0
+            IF bx >= 0 AND by-n >= 0 AND bx < blk-w AND by-n < blk-h
+                PERFORM mon-read-block
+            END-IF
+        END-PERFORM
+    END-PERFORM
+    .
+
+mon-read-block.
+    COMPUTE off-n = 4 + by-n * blk-w + bx
+    IF off-n < 0 OR off-n >= n-block
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE step-n = off-n + 1
+    MOVE blk-raw(step-n) TO off-n
+    PERFORM UNTIL off-n < 0 OR off-n >= n-block OR step-ok = 0
+        COMPUTE step-n = off-n + 1
+        MOVE blk-raw(step-n) TO line-n
+        ADD 1 TO off-n
+        IF line-n = 65535
+            EXIT PERFORM
         END-IF
-        IF did-cross = 1 AND frac >= 65536
-            MOVE 0 TO did-cross
-        END-IF
-        IF did-cross = 1
-            PERFORM open-of
-            IF two-side = 0
-                MOVE 0 TO step-ok
-            ELSE
-                CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 3
-                    RETURNING bit-n
-                IF bit-n NOT = 0 OR op-bot >= op-top
-                    MOVE 0 TO step-ok
-                ELSE
-                    IF fs >= 1 AND fs <= n-sector
-                        AND bs >= 1 AND bs <= n-sector
-                        MOVE sec-floor-h(fs) TO m1
-                        IF sec-floor-h(bs) < m1
-                            MOVE sec-floor-h(bs) TO m1
-                        END-IF
-                        CALL "sub_i32" USING BY VALUE mo-z(who-i)
-                            BY VALUE m1 RETURNING tmp
-                        IF tmp >= 1572864
-                            MOVE 0 TO step-ok
-                        END-IF
-                    END-IF
-                    IF step-ok = 1
-                        CALL "add_i32" USING BY VALUE mo-z(who-i)
-                            BY VALUE mo-h(who-i) RETURNING tmp
-                        IF tmp > op-top
-                            MOVE 0 TO step-ok
-                        ELSE
-                            CALL "sub_i32" USING BY VALUE op-bot
-                                BY VALUE mo-z(who-i) RETURNING tmp
-                            IF tmp > 1572864
-                                MOVE 0 TO step-ok
-                            END-IF
-                        END-IF
-                    END-IF
-                END-IF
+        COMPUTE line-slot = line-n + 1
+        IF line-slot >= 1 AND line-slot <= n-line
+            IF seen-ln(line-slot) NOT = seen-gen
+                MOVE seen-gen TO seen-ln(line-slot)
+                PERFORM mon-one-line
             END-IF
         END-IF
     END-PERFORM
-    IF step-ok = 0
+    .
+
+mon-one-line.
+    *> PIT_CheckLine: box vs line, then openings → floorz/ceilz/dropoffz.
+    IF box-r <= ln-bl(line-slot) OR box-l >= ln-br(line-slot)
+        OR box-t <= ln-bb(line-slot) OR box-b >= ln-bt(line-slot)
         EXIT PARAGRAPH
     END-IF
-    MOVE mo-x(who-i) TO walk-x
-    MOVE mo-y(who-i) TO walk-y
-    PERFORM locate-sec
-    MOVE sec-slot TO mon-sec
-    MOVE nx TO walk-x
-    MOVE ny TO walk-y
-    PERFORM locate-sec
-    IF mon-sec >= 1 AND mon-sec <= n-sector
-        AND sec-slot >= 1 AND sec-slot <= n-sector
-        CALL "sub_i32" USING BY VALUE sec-floor-h(sec-slot)
-            BY VALUE sec-floor-h(mon-sec) RETURNING tmp
-        IF tmp < 0
-            CALL "abs_fixed_i" USING BY VALUE tmp RETURNING tmp
-            IF tmp >= 1572864
-                MOVE 0 TO step-ok
-            END-IF
-        ELSE
-            IF tmp > 1572864
-                MOVE 0 TO step-ok
+    PERFORM mon-box-side
+    IF side-bit NOT = -1
+        EXIT PARAGRAPH
+    END-IF
+    IF ln-back(line-slot) < 0
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    CALL "bit_and" USING BY VALUE ln-flags(line-slot) BY VALUE 1
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    *> ML_BLOCKMONSTERS — monsters only (player try-spot skips this).
+    CALL "bit_and" USING BY VALUE ln-flags(line-slot) BY VALUE 2
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE fs = ln-front(line-slot) + 1
+    COMPUTE bs = ln-back(line-slot) + 1
+    IF fs < 1 OR bs < 1 OR fs > n-sector OR bs > n-sector
+        MOVE 0 TO step-ok
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-ceil-h(fs) < sec-ceil-h(bs)
+        MOVE sec-ceil-h(fs) TO open-top
+    ELSE
+        MOVE sec-ceil-h(bs) TO open-top
+    END-IF
+    IF sec-floor-h(fs) > sec-floor-h(bs)
+        MOVE sec-floor-h(fs) TO open-bot
+        MOVE sec-floor-h(bs) TO low-z
+    ELSE
+        MOVE sec-floor-h(bs) TO open-bot
+        MOVE sec-floor-h(fs) TO low-z
+    END-IF
+    IF open-top < ceil-z
+        MOVE open-top TO ceil-z
+    END-IF
+    IF open-bot > floor-z
+        MOVE open-bot TO floor-z
+    END-IF
+    IF low-z < drop-z
+        MOVE low-z TO drop-z
+    END-IF
+    *> PIT_CheckLine: collect specials after non-blocking two-sided pass.
+    IF ln-spec(line-slot) NOT = 0 AND n-spechit < 64
+        ADD 1 TO n-spechit
+        MOVE line-slot TO spechit-ln(n-spechit)
+    END-IF
+    .
+
+mon-open-spechit.
+    *> P_Move: reversed spechit → P_UseSpecialLine; any true ⇒ move "ok".
+    MOVE 0 TO opened-n
+    IF n-spechit < 1
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING spechit-i FROM n-spechit BY -1 UNTIL spechit-i < 1
+        MOVE spechit-ln(spechit-i) TO line-slot
+        PERFORM mon-use-line
+        IF use-ok = 1
+            MOVE 1 TO opened-n
+        END-IF
+    END-PERFORM
+    .
+
+mon-cross-ok.
+    *> P_TryMove success: cross when the center changes side.
+    *> Monsters only open 4/10/39/88/97/125/126 (vanilla P_CrossSpecialLine).
+    IF n-spechit < 1
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM VARYING spechit-i FROM n-spechit BY -1 UNTIL spechit-i < 1
+        MOVE spechit-ln(spechit-i) TO line-slot
+        IF ln-spec(line-slot) = 4 OR ln-spec(line-slot) = 10
+            OR ln-spec(line-slot) = 39 OR ln-spec(line-slot) = 88
+            OR ln-spec(line-slot) = 97 OR ln-spec(line-slot) = 125
+            OR ln-spec(line-slot) = 126
+            CALL "line_side" USING
+                BY VALUE mo-x(who-i) BY VALUE mo-y(who-i)
+                BY VALUE vtx-x(ln-v1(line-slot))
+                BY VALUE vtx-y(ln-v1(line-slot))
+                BY VALUE ln-dx(line-slot) BY VALUE ln-dy(line-slot)
+                RETURNING side-bit
+            CALL "line_side" USING
+                BY VALUE ox BY VALUE oy
+                BY VALUE vtx-x(ln-v1(line-slot))
+                BY VALUE vtx-y(ln-v1(line-slot))
+                BY VALUE ln-dx(line-slot) BY VALUE ln-dy(line-slot)
+                RETURNING side-a
+            IF side-bit NOT = side-a
+                MOVE line-slot TO cross-ln
+                MOVE who-i TO cross-who
+                MOVE side-a TO cross-side
+                MOVE 4 TO door-mode
+                CALL "door-act" USING door-mode door-busy door-moved
             END-IF
         END-IF
+    END-PERFORM
+    .
+
+mon-use-line.
+    *> P_UseSpecialLine for non-player: only 1/32/33/34, never ML_SECRET.
+    MOVE 0 TO use-ok
+    CALL "bit_and" USING BY VALUE ln-flags(line-slot) BY VALUE 32
+        RETURNING bit-n
+    IF bit-n NOT = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE ln-spec(line-slot) TO rem-n
+    IF rem-n NOT = 1 AND rem-n NOT = 32
+        AND rem-n NOT = 33 AND rem-n NOT = 34
+        EXIT PARAGRAPH
+    END-IF
+    *> useSpecial returns true even when verticalDoor no-ops (32/33/34).
+    MOVE 1 TO use-ok
+    *> Monsters only actually open special 1 (Harbour verticalDoor).
+    IF rem-n NOT = 1
+        EXIT PARAGRAPH
+    END-IF
+    IF ln-back(line-slot) < 0
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE sec-slot = ln-back(line-slot) + 1
+    MOVE 0 TO dtype
+    PERFORM mon-spawn-door
+    .
+
+mon-spawn-door.
+    *> EV_VerticalDoor spawn for monster (#3: never reverse open→close).
+    IF sec-slot < 1 OR sec-slot > 512
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-door(sec-slot) NOT = 0
+        MOVE sec-door(sec-slot) TO di
+        IF di >= 1 AND di <= 32 AND dr-on(di) = 1
+            IF dtype = 0 OR dtype = 5
+                IF dr-dir(di) = -1
+                    MOVE 1 TO dr-dir(di)
+                    MOVE "doropn" TO snd-name
+                    CALL "sfx-play" USING snd-name
+                END-IF
+            END-IF
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO di
+    PERFORM VARYING scan-i FROM 1 BY 1 UNTIL scan-i > 32
+        IF dr-on(scan-i) = 0
+            MOVE scan-i TO di
+            EXIT PERFORM
+        END-IF
+    END-PERFORM
+    IF di = 0
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE sec-index = sec-slot - 1
+    MOVE 2147483647 TO low-h
+    PERFORM VARYING scan-i FROM 1 BY 1 UNTIL scan-i > n-line
+        IF ln-front(scan-i) = sec-index AND ln-back(scan-i) >= 0
+            AND ln-back(scan-i) NOT = sec-index
+            COMPUTE nb = ln-back(scan-i) + 1
+            IF sec-ceil-h(nb) < low-h
+                MOVE sec-ceil-h(nb) TO low-h
+            END-IF
+        END-IF
+        IF ln-back(scan-i) = sec-index AND ln-front(scan-i) >= 0
+            AND ln-front(scan-i) NOT = sec-index
+            COMPUTE nb = ln-front(scan-i) + 1
+            IF sec-ceil-h(nb) < low-h
+                MOVE sec-ceil-h(nb) TO low-h
+            END-IF
+        END-IF
+    END-PERFORM
+    IF low-h = 2147483647
+        MOVE sec-ceil-h(sec-slot) TO low-h
+    END-IF
+    CALL "sub_i32" USING BY VALUE low-h BY VALUE 262144
+        RETURNING dr-top(di)
+    MOVE sec-slot TO dr-sec(di)
+    MOVE dtype TO dr-type(di)
+    MOVE 1 TO dr-dir(di)
+    IF dtype >= 5
+        MOVE 524288 TO dr-spd(di)
+    ELSE
+        MOVE 131072 TO dr-spd(di)
+    END-IF
+    MOVE 150 TO dr-wait(di)
+    MOVE 1 TO dr-on(di)
+    MOVE di TO sec-door(sec-slot)
+    MOVE "doropn" TO snd-name
+    CALL "sfx-play" USING snd-name
+    .
+
+mon-box-side.
+    *> P_BoxOnLineSide (#4): true⇒1; vertical xor when dy < 0.
+    MOVE ln-v1(line-slot) TO v1-slot
+    MOVE ln-v2(line-slot) TO v2-slot
+    CALL "delta_shr16" USING BY VALUE vtx-x(v2-slot)
+        BY VALUE vtx-x(v1-slot) RETURNING ldx
+    CALL "delta_shr16" USING BY VALUE vtx-y(v2-slot)
+        BY VALUE vtx-y(v1-slot) RETURNING ldy
+    IF ldx = 0
+        IF box-r < vtx-x(v1-slot)
+            MOVE 1 TO p1
+        ELSE
+            MOVE 0 TO p1
+        END-IF
+        IF box-l < vtx-x(v1-slot)
+            MOVE 1 TO p2
+        ELSE
+            MOVE 0 TO p2
+        END-IF
+        IF ldy < 0
+            CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
+            CALL "bit_xor" USING BY VALUE p2 BY VALUE 1 RETURNING p2
+        END-IF
+    ELSE
+        IF ldy = 0
+            IF box-t > vtx-y(v1-slot)
+                MOVE 1 TO p1
+            ELSE
+                MOVE 0 TO p1
+            END-IF
+            IF box-b > vtx-y(v1-slot)
+                MOVE 1 TO p2
+            ELSE
+                MOVE 0 TO p2
+            END-IF
+            IF ldx < 0
+                CALL "bit_xor" USING BY VALUE p1 BY VALUE 1 RETURNING p1
+                CALL "bit_xor" USING BY VALUE p2 BY VALUE 1 RETURNING p2
+            END-IF
+        ELSE
+            IF (ldy > 0 AND ldx > 0) OR (ldy < 0 AND ldx < 0)
+                MOVE box-l TO dx
+                MOVE box-t TO dy
+                PERFORM mon-point-side
+                MOVE side-bit TO p1
+                MOVE box-r TO dx
+                MOVE box-b TO dy
+                PERFORM mon-point-side
+                MOVE side-bit TO p2
+            ELSE
+                MOVE box-r TO dx
+                MOVE box-t TO dy
+                PERFORM mon-point-side
+                MOVE side-bit TO p1
+                MOVE box-l TO dx
+                MOVE box-b TO dy
+                PERFORM mon-point-side
+                MOVE side-bit TO p2
+            END-IF
+        END-IF
+    END-IF
+    IF p1 = p2
+        MOVE p1 TO side-bit
+    ELSE
+        MOVE -1 TO side-bit
+    END-IF
+    .
+
+mon-point-side.
+    IF ldx = 0
+        IF dx <= vtx-x(v1-slot)
+            IF ldy > 0
+                MOVE 1 TO side-bit
+            ELSE
+                MOVE 0 TO side-bit
+            END-IF
+        ELSE
+            IF ldy < 0
+                MOVE 1 TO side-bit
+            ELSE
+                MOVE 0 TO side-bit
+            END-IF
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF ldy = 0
+        IF dy <= vtx-y(v1-slot)
+            IF ldx < 0
+                MOVE 1 TO side-bit
+            ELSE
+                MOVE 0 TO side-bit
+            END-IF
+        ELSE
+            IF ldx > 0
+                MOVE 1 TO side-bit
+            ELSE
+                MOVE 0 TO side-bit
+            END-IF
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE dx BY VALUE vtx-x(v1-slot)
+        RETURNING dx
+    CALL "sub_i32" USING BY VALUE dy BY VALUE vtx-y(v1-slot)
+        RETURNING dy
+    CALL "fixed_mul" USING BY VALUE ldy BY VALUE dx RETURNING left-v
+    CALL "fixed_mul" USING BY VALUE dy BY VALUE ldx RETURNING right-v
+    IF right-v < left-v
+        MOVE 0 TO side-bit
+    ELSE
+        MOVE 1 TO side-bit
     END-IF
     .
 
@@ -1469,41 +2491,79 @@ face-dir.
     END-IF
     .
 
-can-see.
-    MOVE 0 TO see-ok
-    IF ply-hp <= 0
-        EXIT PARAGRAPH
-    END-IF
-    PERFORM measure
-    IF dist-n > 98304000
-        EXIT PARAGRAPH
-    END-IF
-    IF need-face = 1
-        CALL "fine_cos_ang" USING BY VALUE mo-ang(who-i) RETURNING cs
-        CALL "fine_sin_ang" USING BY VALUE mo-ang(who-i) RETURNING sn
-        CALL "sub_i32" USING BY VALUE ply-x BY VALUE mo-x(who-i)
-            RETURNING wx
-        CALL "sub_i32" USING BY VALUE ply-y BY VALUE mo-y(who-i)
-            RETURNING wy
-        CALL "fixed_mul" USING BY VALUE wx BY VALUE cs RETURNING along
-        CALL "fixed_mul" USING BY VALUE wy BY VALUE sn RETURNING tmp
-        CALL "add_i32" USING BY VALUE along BY VALUE tmp RETURNING along
-        IF along <= 0 AND dist-n > 4194304
-            EXIT PARAGRAPH
-        END-IF
-    END-IF
+notice-player.
+    *> A_Look after a lost target: gunshot in the sector, else a forward sight.
     MOVE mo-x(who-i) TO walk-x
     MOVE mo-y(who-i) TO walk-y
     PERFORM locate-sec
     MOVE sec-slot TO mon-sec
-    IF mon-sec < 1 OR ply-sec < 1
+    MOVE 0 TO see-ok
+    IF mon-sec >= 1 AND mon-sec <= 512
+        IF sec-alert(mon-sec) = 1
+            CALL "bit_and" USING BY VALUE mo-flags(who-i) BY VALUE 32
+                RETURNING bit-n
+            IF bit-n = 0
+                MOVE 1 TO see-ok
+            ELSE
+                MOVE 0 TO need-face
+                PERFORM can-see
+            END-IF
+        END-IF
+    END-IF
+    IF see-ok = 0
+        PERFORM look-for-player
+    END-IF
+    .
+
+look-for-player.
+    *> P_LookForPlayers allaround=false; single-player only slot 0.
+    MOVE 0 TO see-ok
+    IF ply-hp <= 0
         EXIT PARAGRAPH
     END-IF
-    IF mon-sec = ply-sec
-        MOVE 1 TO see-ok
+    MOVE 0 TO shot-k
+    COMPUTE soul-n = mo-look(who-i) - 1
+    CALL "bit_and" USING BY VALUE soul-n BY VALUE 3 RETURNING soul-n
+    PERFORM UNTIL see-ok = 1
+        IF mo-look(who-i) NOT = 0
+            ADD 1 TO mo-look(who-i)
+            CALL "bit_and" USING BY VALUE mo-look(who-i) BY VALUE 3
+                RETURNING mo-look(who-i)
+        ELSE
+            IF shot-k = 2 OR mo-look(who-i) = soul-n
+                EXIT PERFORM
+            END-IF
+            ADD 1 TO shot-k
+            MOVE 1 TO need-face
+            PERFORM can-see
+            IF see-ok = 0
+                ADD 1 TO mo-look(who-i)
+                CALL "bit_and" USING BY VALUE mo-look(who-i) BY VALUE 3
+                    RETURNING mo-look(who-i)
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+can-see.
+    MOVE 0 TO see-ok
+    PERFORM measure
+    IF mo-tgt(who-i) = 0 AND ply-hp <= 0
         EXIT PARAGRAPH
     END-IF
-    COMPUTE pnum = (mon-sec - 1) * n-sector + (ply-sec - 1)
+    IF dist-n > 98304000
+        EXIT PARAGRAPH
+    END-IF
+    *> Harbour/Node: checkSight first, then FOV when need-face.
+    MOVE mo-x(who-i) TO walk-x
+    MOVE mo-y(who-i) TO walk-y
+    PERFORM locate-sec
+    MOVE sec-slot TO mon-sec
+    IF mon-sec < 1 OR aim-sec < 1
+        EXIT PARAGRAPH
+    END-IF
+    *> P_CheckSight: REJECT first (even same sector — no short-circuit).
+    COMPUTE pnum = (mon-sec - 1) * n-sector + (aim-sec - 1)
     DIVIDE pnum BY 8 GIVING byte-i REMAINDER rem-n
     IF byte-i >= 0 AND byte-i < reject-n
         CALL "byte_at" USING BY REFERENCE reject-buf BY VALUE byte-i
@@ -1520,24 +2580,90 @@ can-see.
     END-IF
     MOVE mo-x(who-i) TO ox
     MOVE mo-y(who-i) TO oy
-    CALL "sub_i32" USING BY VALUE ply-x BY VALUE ox RETURNING tdx
-    CALL "sub_i32" USING BY VALUE ply-y BY VALUE oy RETURNING tdy
+    CALL "sub_i32" USING BY VALUE aim-x BY VALUE ox RETURNING tdx
+    CALL "sub_i32" USING BY VALUE aim-y BY VALUE oy RETURNING tdy
+    *> P_CheckSight slopes: eye = z + height - height/4.
+    CALL "shar32" USING BY VALUE mo-h(who-i) BY VALUE 2 RETURNING tmp
+    CALL "sub_i32" USING BY VALUE mo-h(who-i) BY VALUE tmp RETURNING tmp
+    CALL "add_i32" USING BY VALUE mo-z(who-i) BY VALUE tmp RETURNING eye-z
+    CALL "add_i32" USING BY VALUE aim-z BY VALUE aim-h RETURNING slope-t
+    CALL "sub_i32" USING BY VALUE slope-t BY VALUE eye-z RETURNING slope-t
+    CALL "sub_i32" USING BY VALUE aim-z BY VALUE eye-z RETURNING slope-b
     MOVE 1 TO see-ok
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR see-ok = 0
-        PERFORM cross-one
-        IF did-cross = 1 AND frac > 0 AND frac < 65536
+        CALL "sight_frac" USING
+            BY VALUE ox BY VALUE oy
+            BY VALUE aim-x BY VALUE aim-y
+            BY VALUE vtx-x(ln-v1(li)) BY VALUE vtx-y(ln-v1(li))
+            BY VALUE vtx-x(ln-v2(li)) BY VALUE vtx-y(ln-v2(li))
+            RETURNING frac
+        IF frac > 0 AND frac < 65536
             PERFORM open-of
             IF two-side = 0 OR op-bot >= op-top
                 MOVE 0 TO see-ok
+            ELSE
+                PERFORM sight-clip
             END-IF
         END-IF
     END-PERFORM
+    IF see-ok = 0
+        EXIT PARAGRAPH
+    END-IF
+    IF need-face = 1
+        *> (angleTo - mo.angle) as u32; behind if ANG90 < ang < ANG270.
+        CALL "point_to_angle" USING
+            BY VALUE mo-x(who-i) BY VALUE mo-y(who-i)
+            BY VALUE aim-x BY VALUE aim-y
+            RETURNING along
+        CALL "sub_i32" USING BY VALUE along BY VALUE mo-ang(who-i)
+            RETURNING along
+        CALL "ugt_u32" USING BY VALUE along BY VALUE 1073741824
+            RETURNING bit-n
+        CALL "ugt_u32" USING BY VALUE -1073741824 BY VALUE along
+            RETURNING tmp
+        IF bit-n = 1 AND tmp = 1
+            IF dist-n > 4194304
+                MOVE 0 TO see-ok
+                EXIT PARAGRAPH
+            END-IF
+        END-IF
+    END-IF
+    MOVE 1 TO see-ok
+    .
+
+sight-clip.
+    *> P_CrossSubsector: tighten topslope/bottomslope; closed window blocks.
+    IF fs < 1 OR bs < 1 OR fs > n-sector OR bs > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-floor-h(fs) = sec-floor-h(bs)
+        AND sec-ceil-h(fs) = sec-ceil-h(bs)
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-floor-h(fs) NOT = sec-floor-h(bs)
+        CALL "sub_i32" USING BY VALUE op-bot BY VALUE eye-z RETURNING tmp
+        CALL "fixed_div" USING BY VALUE tmp BY VALUE frac RETURNING numv
+        IF numv > slope-b
+            MOVE numv TO slope-b
+        END-IF
+    END-IF
+    IF sec-ceil-h(fs) NOT = sec-ceil-h(bs)
+        CALL "sub_i32" USING BY VALUE op-top BY VALUE eye-z RETURNING tmp
+        CALL "fixed_div" USING BY VALUE tmp BY VALUE frac RETURNING numv
+        IF numv < slope-t
+            MOVE numv TO slope-t
+        END-IF
+    END-IF
+    IF slope-t <= slope-b
+        MOVE 0 TO see-ok
+    END-IF
     .
 
 measure.
-    CALL "sub_i32" USING BY VALUE ply-x BY VALUE mo-x(who-i)
+    PERFORM load-aim
+    CALL "sub_i32" USING BY VALUE aim-x BY VALUE mo-x(who-i)
         RETURNING dx
-    CALL "sub_i32" USING BY VALUE ply-y BY VALUE mo-y(who-i)
+    CALL "sub_i32" USING BY VALUE aim-y BY VALUE mo-y(who-i)
         RETURNING dy
     CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
     CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
@@ -1551,11 +2677,17 @@ measure.
     .
 
 hear-shot.
+    *> P_NoiseAlert / P_RecursiveSound (Harbour/vanilla).
+    *> Flood from fire-time XY (gun runs before walk XY that tic).
     IF ply-shot NOT = 1
         EXIT PARAGRAPH
     END-IF
     MOVE 0 TO ply-shot
     ADD 1 TO hear-id
+    MOVE ply-shot-x TO walk-x
+    MOVE ply-shot-y TO walk-y
+    PERFORM locate-sec
+    MOVE sec-slot TO ply-sec
     IF ply-sec < 1 OR ply-sec > 512
         EXIT PARAGRAPH
     END-IF
@@ -1566,9 +2698,14 @@ hear-shot.
     PERFORM UNTIL q-at >= n-q
         ADD 1 TO q-at
         MOVE q-sec(q-at) TO fs
+        MOVE q-blk(q-at) TO hear-blk
         IF fs >= 1 AND fs <= 512
+            *> Skip only if already visited this flood with equal/better path.
             IF sec-mark(fs) NOT = hear-id
+                OR sec-trav(fs) > hear-blk + 1
                 MOVE hear-id TO sec-mark(fs)
+                COMPUTE sec-trav(fs) = hear-blk + 1
+                MOVE 1 TO sec-alert(fs)
                 PERFORM hear-lines
             END-IF
         END-IF
@@ -1585,22 +2722,25 @@ hear-lines.
         IF ln-back(li) + 1 = keep-sec AND ln-front(li) >= 0
             COMPUTE other-sec = ln-front(li) + 1
         END-IF
-        IF other-sec >= 1 AND other-sec <= 512 AND n-q < 64
+        IF other-sec >= 1 AND other-sec <= 512 AND n-q < 512
             CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 4
                 RETURNING bit-n
             IF bit-n NOT = 0
                 PERFORM open-of
                 IF op-top > op-bot
-                    MOVE q-blk(q-at) TO new-blk
+                    MOVE hear-blk TO new-blk
                     CALL "bit_and" USING BY VALUE ln-flags(li) BY VALUE 64
                         RETURNING bit-n
-                    IF bit-n = 0 OR new-blk = 0
-                        IF bit-n NOT = 0
-                            MOVE 1 TO new-blk
-                        END-IF
+                    IF bit-n = 0
                         ADD 1 TO n-q
                         MOVE other-sec TO q-sec(n-q)
                         MOVE new-blk TO q-blk(n-q)
+                    ELSE
+                        IF new-blk = 0
+                            ADD 1 TO n-q
+                            MOVE other-sec TO q-sec(n-q)
+                            MOVE 1 TO q-blk(n-q)
+                        END-IF
                     END-IF
                 END-IF
             END-IF
@@ -1746,6 +2886,74 @@ ray-side.
     END-IF
     .
 
+load-aim.
+    *> 0 keeps the player. A dead fight target falls back to the player.
+    MOVE 0 TO aim-shadow
+    IF mo-tgt(who-i) > 0
+        MOVE mo-tgt(who-i) TO own-n
+        IF own-n > n-mobj OR mo-hp(own-n) <= 0
+            MOVE 0 TO mo-tgt(who-i)
+            MOVE 0 TO mo-thrs(who-i)
+        ELSE
+            CALL "bit_and" USING BY VALUE mo-flags(own-n) BY VALUE 4
+                RETURNING bit-n
+            IF bit-n = 0
+                MOVE 0 TO mo-tgt(who-i)
+                MOVE 0 TO mo-thrs(who-i)
+            END-IF
+        END-IF
+    END-IF
+    IF mo-tgt(who-i) = 0
+        MOVE ply-x TO aim-x
+        MOVE ply-y TO aim-y
+        MOVE ply-z TO aim-z
+        MOVE ply-h TO aim-h
+        MOVE ply-sec TO aim-sec
+        MOVE ply-rad TO aim-rad
+        IF ply-invis > 0
+            MOVE 1 TO aim-shadow
+        END-IF
+    ELSE
+        MOVE mo-x(own-n) TO aim-x
+        MOVE mo-y(own-n) TO aim-y
+        MOVE mo-z(own-n) TO aim-z
+        MOVE mo-h(own-n) TO aim-h
+        MOVE mo-rad(own-n) TO aim-rad
+        MOVE mo-x(own-n) TO walk-x
+        MOVE mo-y(own-n) TO walk-y
+        PERFORM locate-sec
+        MOVE sec-slot TO aim-sec
+        CALL "bit_and" USING BY VALUE mo-flags(own-n) BY VALUE 262144
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO aim-shadow
+        END-IF
+    END-IF
+    .
+
+ray-mon.
+    CALL "sub_i32" USING BY VALUE mo-x(foe-j) BY VALUE ox RETURNING wx
+    CALL "sub_i32" USING BY VALUE mo-y(foe-j) BY VALUE oy RETURNING wy
+    CALL "fixed_mul" USING BY VALUE wx BY VALUE cs RETURNING along
+    CALL "fixed_mul" USING BY VALUE wy BY VALUE sn RETURNING tmp
+    CALL "add_i32" USING BY VALUE along BY VALUE tmp RETURNING along
+    IF along <= 0
+        EXIT PARAGRAPH
+    END-IF
+    CALL "fixed_mul" USING BY VALUE wx BY VALUE sn RETURNING dx
+    CALL "fixed_mul" USING BY VALUE wy BY VALUE cs RETURNING dy
+    CALL "sub_i32" USING BY VALUE dx BY VALUE dy RETURNING dx
+    CALL "abs_fixed_i" USING BY VALUE dx RETURNING dx
+    IF dx >= mo-rad(foe-j)
+        EXIT PARAGRAPH
+    END-IF
+    DIVIDE along BY 2048 GIVING along
+    IF hit-fr = 0 OR along < hit-fr
+        MOVE along TO hit-fr
+        MOVE foe-j TO hit-mo
+    END-IF
+    .
+
 locate-sec.
     MOVE 1 TO sub-slot
     MOVE 1 TO sec-slot
@@ -1788,17 +2996,39 @@ locate-sec.
     END-IF
     .
 
-take-rnd.
-    ADD 1 TO rnd-i
-    CALL "bit_and" USING BY VALUE rnd-i BY VALUE 255 RETURNING rnd-i
-    IF rnd-i < 128
-        CALL "byte_at" USING BY REFERENCE rnd-lo BY VALUE rnd-i
-            RETURNING rnd-n
-    ELSE
-        COMPUTE tmp = rnd-i - 128
-        CALL "byte_at" USING BY REFERENCE rnd-hi BY VALUE tmp
-            RETURNING rnd-n
+active-snd.
+    *> A_Chase activesound, only when the draw is under 3.
+    MOVE SPACES TO snd-name
+    IF mo-name(who-i) = "TROO"
+        MOVE "bgact" TO snd-name
     END-IF
+    IF mo-name(who-i) = "VILE"
+        MOVE "vilact" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "SKEL"
+        MOVE "skeact" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "BSPI"
+        MOVE "bspact" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "SARG" OR mo-name(who-i) = "HEAD"
+        OR mo-name(who-i) = "BOSS" OR mo-name(who-i) = "BOS2"
+        OR mo-name(who-i) = "SPID" OR mo-name(who-i) = "CYBR"
+        OR mo-name(who-i) = "PAIN"
+        MOVE "dmact" TO snd-name
+    END-IF
+    IF mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
+        OR mo-name(who-i) = "CPOS" OR mo-name(who-i) = "SSWV"
+        OR mo-name(who-i) = "FATT"
+        MOVE "posact" TO snd-name
+    END-IF
+    IF snd-name NOT = SPACES
+        CALL "sfx-play" USING snd-name
+    END-IF
+    .
+
+take-rnd.
+    CALL "p-random" USING rnd-n
     .
 
 END PROGRAM enemy-tic.

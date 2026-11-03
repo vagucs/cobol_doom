@@ -1,4 +1,4 @@
-/* DOOM generic portado do python_doom para COBOL com SDL2.
+/* DOOM generic portado do python_doom para COBOL com SDL3.
 
    Por Wagner Nunes da Silva
 

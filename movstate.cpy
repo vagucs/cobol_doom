@@ -27,3 +27,6 @@
    05 fl-high BINARY-LONG OCCURS 32 TIMES.
    05 fl-kind BINARY-LONG OCCURS 32 TIMES.
    05 pend-tag BINARY-LONG VALUE 0.
+   05 cross-ln BINARY-LONG.
+   05 cross-who BINARY-LONG.
+   05 cross-side BINARY-LONG.

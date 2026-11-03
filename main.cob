@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -45,6 +45,25 @@ WORKING-STORAGE SECTION.
 01 quote-n BINARY-LONG.
 01 suf-at BINARY-LONG.
 01 fps-on BINARY-LONG VALUE 0.
+01 demo-name PIC X(260) VALUE SPACES.
+01 demo-want-time BINARY-LONG VALUE 0.
+01 demo-buf PIC X(262144).
+01 demo-cap BINARY-LONG VALUE 262144.
+01 demo-byte BINARY-LONG.
+01 demo-need BINARY-LONG.
+01 demo-ver BINARY-LONG.
+01 demo-ep BINARY-LONG.
+01 demo-mp BINARY-LONG.
+01 demo-path PIC X(260).
+01 demo-ok BINARY-LONG.
+01 demo-real BINARY-LONG.
+01 demo-fps PIC ZZZ9.9.
+01 demo-attract BINARY-LONG VALUE 0.
+01 demo-seq BINARY-LONG VALUE 0.
+01 page-tic BINARY-LONG VALUE 170.
+01 bit-atk BINARY-LONG.
+01 bit-use BINARY-LONG.
+01 tmp BINARY-LONG.
 01 vsync-n BINARY-LONG VALUE 1.
 01 fps-n BINARY-LONG VALUE 0.
 01 fps-show BINARY-LONG VALUE 0.
@@ -81,6 +100,7 @@ COPY "sprstate.cpy".
 01 gun-busy BINARY-LONG VALUE 0.
 01 gun-drew BINARY-LONG VALUE 0.
 01 foe-drew BINARY-LONG VALUE 0.
+01 foe-pass BINARY-LONG VALUE 0.
 01 floor-hurt BINARY-LONG VALUE 0.
 01 cheat-drew BINARY-LONG VALUE 0.
 01 typed-n BINARY-LONG.
@@ -124,6 +144,14 @@ COPY "sprstate.cpy".
 01 now-ms BINARY-LONG.
 01 last-ms BINARY-LONG VALUE 0.
 01 wait-ms BINARY-LONG.
+01 walk-phase BINARY-LONG.
+01 fly-hold BINARY-LONG.
+01 sync-n BINARY-LONG.
+01 sync-sx BINARY-LONG.
+01 sync-i BINARY-LONG.
+01 sync-bit BINARY-LONG.
+01 sync-weap BINARY-LONG.
+01 sync-open BINARY-LONG VALUE 0.
 
 PROCEDURE DIVISION.
     CALL "compat_self_check" RETURNING rc
@@ -186,7 +214,7 @@ PROCEDURE DIVISION.
         BY VALUE vsync-n
         RETURNING rc
     IF rc NOT = 0
-        DISPLAY "SDL2 nao abriu a janela " rc
+        DISPLAY "SDL3 nao abriu a janela " rc
         CALL "video_shutdown"
         STOP RUN RETURNING rc
     END-IF
@@ -194,6 +222,8 @@ PROCEDURE DIVISION.
         DISPLAY "vsync off"
     END-IF
     CALL "audio_init" RETURNING rc
+    CALL "audio_set_sfx_volume" USING BY VALUE ply-sfxvol
+    CALL "audio_set_music_volume" USING BY VALUE ply-musvol
     CALL "mus-title"
     MOVE map-name TO boot-map
     MOVE "MAP01" TO want-map
@@ -206,7 +236,12 @@ PROCEDURE DIVISION.
     MOVE 0 TO mode-n
     MOVE 0 TO pick-n
     MOVE 0 TO live-n
-    PERFORM draw-front
+    MOVE 0 TO demo-seq
+    IF pack-n = 1
+        COMPUTE page-tic = 35 * 11
+    ELSE
+        MOVE 170 TO page-tic
+    END-IF
     MOVE lump-n TO show-lumps
     MOVE n-lines TO show-lines
     MOVE n-verts TO show-verts
@@ -217,6 +252,16 @@ PROCEDURE DIVISION.
         "  texturas " FUNCTION TRIM(show-tex)
         "  lumps " FUNCTION TRIM(show-lumps)
         "  vista"
+    IF FUNCTION TRIM(demo-name) NOT = SPACES
+        PERFORM start-demo
+        IF demo-on = 0
+            DISPLAY "demo nao encontrado: " FUNCTION TRIM(demo-name)
+            CALL "video_shutdown"
+            STOP RUN RETURNING 7
+        END-IF
+    ELSE
+        PERFORM draw-front
+    END-IF
     PERFORM UNTIL pressed = -1
         CALL "video_present"
         PERFORM note-fps
@@ -224,10 +269,18 @@ PROCEDURE DIVISION.
         CALL "music_pump"
         IF pressed NOT = -1
             IF mode-n = 3 AND pressed = 27
-                MOVE 1 TO mode-n
-                MOVE 1 TO live-n
-                MOVE 0 TO pick-n
-                PERFORM draw-front
+                IF demo-attract = 1
+                    PERFORM abort-attract
+                ELSE
+                    MOVE 1 TO mode-n
+                    MOVE 1 TO live-n
+                    MOVE 0 TO pick-n
+                    PERFORM draw-front
+                END-IF
+            ELSE
+            IF mode-n = 3 AND demo-attract = 1 AND pressed NOT = 0
+                AND pressed NOT = -1
+                PERFORM abort-attract
             ELSE
             IF mode-n = 6
                 PERFORM finale-step
@@ -261,24 +314,41 @@ PROCEDURE DIVISION.
             END-IF
             PERFORM size-key
             PERFORM read-keys
+            IF demo-on = 1
+                MOVE 0 TO k-up
+                MOVE 0 TO k-down
+                MOVE 0 TO k-left
+                MOVE 0 TO k-right
+                MOVE 0 TO k-shift
+                MOVE 0 TO k-alt
+                MOVE 0 TO k-comma
+                MOVE 0 TO k-dot
+                MOVE 0 TO k-use
+                MOVE 0 TO k-fire
+            END-IF
             MOVE pressed TO typed-n
             IF typed-n >= 65 AND typed-n <= 90
                 ADD 32 TO typed-n
             END-IF
-            IF typed-n >= 97 AND typed-n <= 122
-                OR (typed-n >= 48 AND typed-n <= 57)
-                CALL "cheat-feed" USING typed-n cheat-drew
+            IF demo-on = 0
+                IF typed-n >= 97 AND typed-n <= 122
+                    OR (typed-n >= 48 AND typed-n <= 57)
+                    CALL "cheat-feed" USING typed-n cheat-drew
+                ELSE
+                    MOVE 0 TO cheat-drew
+                END-IF
             ELSE
                 MOVE 0 TO cheat-drew
             END-IF
             IF ply-warp = 1
                 PERFORM do-warp
             END-IF
-            IF k-use = 0
+            IF k-use = 0 AND demo-on = 0
                 MOVE 0 TO k-use-down
             END-IF
             MOVE 0 TO moving
-            IF k-up NOT = 0 OR k-down NOT = 0
+            IF demo-on = 1
+                OR k-up NOT = 0 OR k-down NOT = 0
                 OR k-left NOT = 0 OR k-right NOT = 0
                 OR k-comma NOT = 0 OR k-dot NOT = 0
                 OR ply-momx NOT = 0 OR ply-momy NOT = 0
@@ -290,7 +360,9 @@ PROCEDURE DIVISION.
                 MOVE 1 TO air-n
             END-IF
             IF ply-hp <= 0
-                MOVE 0 TO moving
+                IF demo-on = 0
+                    MOVE 0 TO moving
+                END-IF
                 MOVE 0 TO k-fire
                 MOVE 0 TO ply-dvh
                 MOVE 0 TO ply-bob
@@ -299,8 +371,8 @@ PROCEDURE DIVISION.
             CALL "video_ms" RETURNING now-ms
                 CALL "sub_i32" USING BY VALUE now-ms BY VALUE last-ms
                     RETURNING wait-ms
-                IF last-ms = 0 OR wait-ms >= 28
-                    IF last-ms = 0
+                IF last-ms = 0 OR wait-ms >= 28 OR demo-timing = 1
+                    IF last-ms = 0 OR demo-timing = 1
                         MOVE 1 TO tic-n
                     ELSE
                         DIVIDE wait-ms BY 28 GIVING tic-n
@@ -316,7 +388,32 @@ PROCEDURE DIVISION.
                     IF cheat-drew = 1
                         MOVE 1 TO draw-now
                     END-IF
+                    IF demo-on = 1 OR demo-timing = 1
+                        MOVE 1 TO draw-now
+                    END-IF
                     PERFORM tic-n TIMES
+                        IF demo-on = 1
+                            PERFORM read-demo-tic
+                            IF demo-on = 0
+                                EXIT PERFORM
+                            END-IF
+                            CALL "bit_and" USING BY VALUE cmd-btns
+                                BY VALUE 1 RETURNING bit-atk
+                            CALL "bit_and" USING BY VALUE cmd-btns
+                                BY VALUE 2 RETURNING bit-use
+                            IF bit-atk NOT = 0
+                                MOVE 1 TO k-fire
+                            ELSE
+                                MOVE 0 TO k-fire
+                            END-IF
+                            IF bit-use NOT = 0
+                                MOVE 1 TO k-use
+                            ELSE
+                                MOVE 0 TO k-use
+                                MOVE 0 TO k-use-down
+                            END-IF
+                            ADD 1 TO demo-gametic
+                        END-IF
                         IF ply-hp <= 0 AND ply-vh > 393216
                             SUBTRACT 65536 FROM ply-vh
                             IF ply-vh < 393216
@@ -324,36 +421,63 @@ PROCEDURE DIVISION.
                             END-IF
                             MOVE 1 TO draw-now
                         END-IF
-                        IF ply-exit = 0
-                            AND (moving = 1 OR air-n = 1)
-                            CALL "walk-tic" USING k-up k-down k-left
-                                k-right k-shift k-alt k-comma k-dot
-                            MOVE 1 TO draw-now
-                        END-IF
+                        *> Python playerThink: special → thrust → use → psprites;
+                        *> then mobj XY/pickup → enemies → door/floor thinkers.
                         CALL "floor-tic" USING floor-hurt
                         IF floor-hurt = 1
                             MOVE 1 TO draw-now
                         END-IF
-                        MOVE 0 TO act-mode
-                        IF k-use = 1 AND k-use-down = 0
-                            MOVE 1 TO act-mode
-                            MOVE 1 TO k-use-down
+                        IF ply-exit = 0
+                            AND (moving = 1 OR air-n = 1 OR demo-on = 1
+                                OR ply-hp <= 0)
+                            MOVE 1 TO walk-phase
+                            CALL "walk-tic" USING k-up k-down k-left
+                                k-right k-shift k-alt k-comma k-dot
+                                walk-phase
                         END-IF
-                        IF moving = 1 OR air-n = 1 OR act-mode = 1
-                            OR door-busy = 1
+                        MOVE 0 TO act-mode
+                        IF k-use = 1 AND k-use-down = 0 AND ply-hp > 0
+                            MOVE 3 TO act-mode
+                            MOVE 1 TO k-use-down
                             CALL "door-act" USING act-mode door-busy
                                 door-moved
-                            IF door-moved = 1
-                                MOVE 1 TO draw-now
-                            END-IF
                         END-IF
                         CALL "gun-tic" USING k-fire gun-busy gun-drew
                         IF gun-drew = 1
                             MOVE 1 TO draw-now
                         END-IF
-                        CALL "enemy-tic" USING foe-drew
+                        IF ply-exit = 0
+                            AND (moving = 1 OR air-n = 1 OR demo-on = 1
+                                OR ply-hp <= 0)
+                            MOVE 2 TO walk-phase
+                            CALL "walk-tic" USING k-up k-down k-left
+                                k-right k-shift k-alt k-comma k-dot
+                                walk-phase
+                            MOVE 1 TO draw-now
+                        END-IF
+                        *> Map mobjs think before a rocket spawned mid-level:
+                        *> it was linked at the end of the list.
+                        MOVE 0 TO foe-pass
+                        CALL "enemy-tic" USING foe-drew foe-pass
+                        *> T_LightFlash sits between map mobjs and missiles.
+                        *> An imp ball that hits the same tic must roll damage
+                        *> after that light random.
+                        CALL "light-tic"
+                        MOVE 1 TO foe-pass
+                        CALL "enemy-tic" USING foe-drew foe-pass
+                        MOVE -1 TO fly-hold
+                        CALL "gun-tic" USING fly-hold gun-busy gun-drew
                         IF foe-drew = 1
                             MOVE 1 TO draw-now
+                        END-IF
+                        MOVE 0 TO act-mode
+                        IF moving = 1 OR air-n = 1 OR door-busy = 1
+                            OR demo-on = 1
+                            CALL "door-act" USING act-mode door-busy
+                                door-moved
+                            IF door-moved = 1
+                                MOVE 1 TO draw-now
+                            END-IF
                         END-IF
                         PERFORM fade-powers
                         IF ply-pain > 0
@@ -364,6 +488,10 @@ PROCEDURE DIVISION.
                             SUBTRACT 1 FROM ply-fwait
                             MOVE 1 TO draw-now
                         END-IF
+                        IF demo-on = 1
+                            PERFORM write-sync-line
+                        END-IF
+                        ADD 1 TO ply-time
                         IF ply-exit > 1
                             SUBTRACT 1 FROM ply-exit
                         END-IF
@@ -378,7 +506,11 @@ PROCEDURE DIVISION.
                         PERFORM paint-view
                     END-IF
                     IF ply-exit = 1
-                        PERFORM begin-tally
+                        IF demo-on = 1
+                            PERFORM end-demo
+                        ELSE
+                            PERFORM begin-tally
+                        END-IF
                     END-IF
                 ELSE
                     IF cheat-drew = 1 AND ply-exit NOT = 1
@@ -389,8 +521,12 @@ PROCEDURE DIVISION.
             END-IF
             END-IF
             END-IF
+            END-IF
         END-IF
     END-PERFORM
+    IF demo-timing = 1 AND demo-gametic > 0
+        PERFORM report-timedemo
+    END-IF
     CALL "video_shutdown"
     STOP RUN.
 
@@ -512,6 +648,7 @@ front-keys.
         ELSE
             MOVE 1 TO mode-n
             MOVE 0 TO pick-n
+            MOVE 0 TO demo-attract
             PERFORM draw-front
         END-IF
         EXIT PARAGRAPH
@@ -537,6 +674,12 @@ front-keys.
     IF mode-n = 2 AND pressed = 1073741903
         PERFORM opt-right
     END-IF
+    IF mode-n = 11 AND pressed = 1073741904
+        PERFORM sound-left
+    END-IF
+    IF mode-n = 11 AND pressed = 1073741903
+        PERFORM sound-right
+    END-IF
     IF pressed = 13 OR pressed = 32
         PERFORM opt-enter
         IF mode-n = 5 OR pressed = -1
@@ -544,18 +687,28 @@ front-keys.
         END-IF
     END-IF
     IF pressed = 27
-        IF mode-n = 2 OR mode-n = 7 OR mode-n = 8
-            OR mode-n = 9 OR mode-n = 10
-            MOVE 1 TO mode-n
-            MOVE 0 TO pick-n
+        IF mode-n = 11
+            MOVE 2 TO mode-n
+            MOVE 3 TO pick-n
         ELSE
-            IF live-n = 1
-                MOVE 3 TO mode-n
-                PERFORM paint-view
-                EXIT PARAGRAPH
+            IF mode-n = 2 OR mode-n = 7 OR mode-n = 8
+                OR mode-n = 9 OR mode-n = 10
+                MOVE 1 TO mode-n
+                MOVE 0 TO pick-n
             ELSE
-                MOVE 0 TO mode-n
-                CALL "mus-title"
+                IF live-n = 1
+                    MOVE 3 TO mode-n
+                    PERFORM paint-view
+                    EXIT PARAGRAPH
+                ELSE
+                    MOVE 0 TO mode-n
+                    IF pack-n = 1
+                        COMPUTE page-tic = 35 * 11
+                    ELSE
+                        MOVE 170 TO page-tic
+                    END-IF
+                    CALL "mus-title"
+                END-IF
             END-IF
         END-IF
     END-IF
@@ -579,6 +732,28 @@ opt-right.
     IF pick-n = 2 AND ply-scale < 4
         ADD 1 TO ply-scale
         CALL "video_set_scale" USING BY VALUE ply-scale RETURNING rc
+    END-IF
+    .
+
+sound-left.
+    IF pick-n = 0 AND ply-sfxvol > 0
+        SUBTRACT 1 FROM ply-sfxvol
+        CALL "audio_set_sfx_volume" USING BY VALUE ply-sfxvol
+    END-IF
+    IF pick-n = 1 AND ply-musvol > 0
+        SUBTRACT 1 FROM ply-musvol
+        CALL "audio_set_music_volume" USING BY VALUE ply-musvol
+    END-IF
+    .
+
+sound-right.
+    IF pick-n = 0 AND ply-sfxvol < 15
+        ADD 1 TO ply-sfxvol
+        CALL "audio_set_sfx_volume" USING BY VALUE ply-sfxvol
+    END-IF
+    IF pick-n = 1 AND ply-musvol < 15
+        ADD 1 TO ply-musvol
+        CALL "audio_set_music_volume" USING BY VALUE ply-musvol
     END-IF
     .
 
@@ -637,7 +812,16 @@ opt-enter.
         MOVE 0 TO mode-n
         MOVE 0 TO live-n
         MOVE 0 TO pick-n
+        IF pack-n = 1
+            COMPUTE page-tic = 35 * 11
+        ELSE
+            MOVE 170 TO page-tic
+        END-IF
         CALL "mus-title"
+    END-IF
+    IF mode-n = 2 AND pick-n = 3
+        MOVE 11 TO mode-n
+        MOVE 0 TO pick-n
     END-IF
     .
 
@@ -647,7 +831,10 @@ menu-max.
         MOVE 4 TO max-pick
     END-IF
     IF mode-n = 2
-        MOVE 2 TO max-pick
+        MOVE 3 TO max-pick
+    END-IF
+    IF mode-n = 11
+        MOVE 1 TO max-pick
     END-IF
     IF mode-n = 7
         MOVE 3 TO max-pick
@@ -750,6 +937,7 @@ front-clock.
     MOVE now-ms TO last-ms
     IF mode-n = 1 OR mode-n = 2 OR mode-n = 7
         OR mode-n = 8 OR mode-n = 9 OR mode-n = 10
+        OR mode-n = 11
         OR (mode-n = 4 AND ply-loc = 1)
         SUBTRACT 1 FROM skull-wait
         IF skull-wait <= 0
@@ -759,6 +947,14 @@ front-clock.
             ELSE
                 MOVE 0 TO skull-n
             END-IF
+        END-IF
+    END-IF
+    *> Title attract: after page-tic, cycle demos like vanilla D_DoAdvanceDemo.
+    IF mode-n = 0 AND demo-on = 0
+        SUBTRACT 1 FROM page-tic
+        IF page-tic < 0
+            PERFORM advance-demo
+            EXIT PARAGRAPH
         END-IF
     END-IF
     IF mode-n = 4
@@ -1191,12 +1387,364 @@ take-tok.
         MOVE tok TO want
         EXIT PARAGRAPH
     END-IF
+    IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-PLAYDEMO"
+        PERFORM skip-sp
+        PERFORM read-tok
+        MOVE tok TO demo-name
+        MOVE 0 TO demo-want-time
+        MOVE 1 TO demo-single
+        EXIT PARAGRAPH
+    END-IF
+    IF FUNCTION UPPER-CASE(FUNCTION TRIM(tok)) = "-TIMEDEMO"
+        PERFORM skip-sp
+        PERFORM read-tok
+        MOVE tok TO demo-name
+        MOVE 1 TO demo-want-time
+        MOVE 1 TO demo-single
+        EXIT PARAGRAPH
+    END-IF
     IF tok-n >= 4
         SUBTRACT 3 FROM tok-n GIVING suf-at
         IF FUNCTION UPPER-CASE(tok(suf-at:4)) = ".WAD"
             MOVE tok TO want
         END-IF
     END-IF
+    .
+
+start-demo.
+    MOVE 0 TO demo-on
+    MOVE 0 TO demo-ok
+    MOVE FUNCTION UPPER-CASE(FUNCTION TRIM(demo-name)) TO lname
+    *> Try WAD lump first (DEMO1 / DEMO2 / DEMO3).
+    CALL "wad-find" USING lname lump-n
+    IF lump-n >= 0
+        CALL "wad-read-num" USING lump-n demo-buf demo-cap demo-len
+        IF demo-len > 4
+            MOVE 1 TO demo-ok
+        END-IF
+    END-IF
+    *> Then file / file.lmp.
+    IF demo-ok = 0
+        MOVE demo-name TO demo-path
+        CALL "file_size" USING BY REFERENCE demo-path BY VALUE 260
+            RETURNING demo-len
+        IF demo-len < 0
+            MOVE FUNCTION TRIM(demo-name) TO demo-path
+            MOVE ".lmp" TO demo-path(FUNCTION LENGTH(FUNCTION TRIM(demo-name)) + 1:4)
+            CALL "file_size" USING BY REFERENCE demo-path BY VALUE 260
+                RETURNING demo-len
+        END-IF
+        IF demo-len > 4 AND demo-len <= demo-cap
+            CALL "file_read" USING BY REFERENCE demo-path BY VALUE 260
+                BY VALUE 0 BY VALUE demo-len BY REFERENCE demo-buf
+                RETURNING rc
+            IF rc = 0
+                MOVE 1 TO demo-ok
+            END-IF
+        END-IF
+    END-IF
+    IF demo-ok = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 0 TO demo-p
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING demo-ver
+    ADD 1 TO demo-p
+    MOVE 0 TO demo-long
+    IF demo-ver <= 4
+        *> Pre-1.4: first byte is skill, not version.
+        MOVE 0 TO demo-p
+    ELSE
+        *> Harbour/python: only version 111 (-longtics) uses 5-byte cmds.
+        *> Vanilla 1.9 demos are version 109 with short 4-byte ticcmds.
+        IF demo-ver = 111
+            MOVE 1 TO demo-long
+        END-IF
+    END-IF
+    IF demo-p + 3 > demo-len
+        EXIT PARAGRAPH
+    END-IF
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING ply-skill
+    ADD 1 TO demo-p
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING demo-ep
+    ADD 1 TO demo-p
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING demo-mp
+    ADD 1 TO demo-p
+    IF demo-ver > 4
+        IF demo-p + 9 > demo-len
+            EXIT PARAGRAPH
+        END-IF
+        ADD 9 TO demo-p
+    END-IF
+    IF ply-skill < 0
+        MOVE 0 TO ply-skill
+    END-IF
+    IF ply-skill > 4
+        MOVE 4 TO ply-skill
+    END-IF
+    IF pack-n = 1
+        MOVE "MAP01" TO map-name
+        IF demo-mp >= 1 AND demo-mp <= 32
+            DIVIDE demo-mp BY 10 GIVING tens-n REMAINDER ones-n
+            ADD 48 TO tens-n
+            ADD 48 TO ones-n
+            MOVE FUNCTION CHAR(tens-n + 1) TO map-name(4:1)
+            MOVE FUNCTION CHAR(ones-n + 1) TO map-name(5:1)
+        END-IF
+    ELSE
+        MOVE "E1M1" TO map-name
+        IF demo-ep >= 1 AND demo-ep <= 4
+            COMPUTE tmp = demo-ep + 48
+            MOVE FUNCTION CHAR(tmp + 1) TO map-name(2:1)
+        END-IF
+        IF demo-mp >= 1 AND demo-mp <= 9
+            COMPUTE tmp = demo-mp + 48
+            MOVE FUNCTION CHAR(tmp + 1) TO map-name(4:1)
+        END-IF
+    END-IF
+    MOVE 0 TO ply-keep
+    MOVE 0 TO ply-mapon
+    MOVE 0 TO ply-iddt
+    PERFORM load-level
+    IF rc NOT = 0
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO demo-on
+    MOVE demo-want-time TO demo-timing
+    IF demo-attract = 0
+        MOVE 1 TO demo-single
+    END-IF
+    MOVE 0 TO demo-gametic
+    MOVE 1 TO live-n
+    MOVE 3 TO mode-n
+    MOVE 0 TO last-ms
+    CALL "video_ms" RETURNING demo-start-ms
+    IF sync-open = 0
+        CALL "sync_log_open" RETURNING rc
+        IF rc = 0
+            MOVE 1 TO sync-open
+        END-IF
+    END-IF
+    PERFORM paint-view
+    IF demo-attract = 0
+        DISPLAY "demo " FUNCTION TRIM(demo-name) " map "
+            FUNCTION TRIM(map-name)
+    END-IF
+    .
+
+write-sync-line.
+    MOVE 0 TO sync-n
+    MOVE 0 TO sync-sx
+    PERFORM VARYING sync-i FROM 1 BY 1 UNTIL sync-i > n-mobj
+        CALL "bit_and" USING BY VALUE mo-flags(sync-i)
+            BY VALUE 4194304 RETURNING sync-bit
+        IF sync-bit NOT = 0 AND mo-hp(sync-i) > 0
+            ADD 1 TO sync-n
+            *> map unit toward zero (Python _map_unit), not ASR.
+            IF mo-x(sync-i) >= 0
+                COMPUTE sync-bit = mo-x(sync-i) / 65536
+            ELSE
+                COMPUTE sync-bit = - ((- mo-x(sync-i)) / 65536)
+            END-IF
+            ADD sync-bit TO sync-sx
+        END-IF
+    END-PERFORM
+    COMPUTE sync-weap = ply-weap - 1
+    IF sync-weap < 0
+        MOVE 0 TO sync-weap
+    END-IF
+    CALL "sync_log_line" USING BY VALUE ply-time BY VALUE ply-hp
+        BY VALUE ply-armor BY VALUE ply-x BY VALUE ply-y
+        BY VALUE ply-z BY VALUE ply-floor BY VALUE ply-momx
+        BY VALUE ply-momy BY VALUE ply-ang BY VALUE sync-n
+        BY VALUE sync-sx BY VALUE ply-rnd BY VALUE sync-weap
+        BY VALUE ply-misl
+    .
+
+read-demo-tic.
+    MOVE 0 TO cmd-fwd
+    MOVE 0 TO cmd-side
+    MOVE 0 TO cmd-turn
+    MOVE 0 TO cmd-btns
+    IF demo-long = 1
+        MOVE 5 TO demo-need
+    ELSE
+        MOVE 4 TO demo-need
+    END-IF
+    IF demo-p + demo-need > demo-len
+        PERFORM end-demo
+        EXIT PARAGRAPH
+    END-IF
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING demo-byte
+    IF demo-byte = 128
+        *> DEMOMARKER 0x80
+        PERFORM end-demo
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM demo-sbyte
+    MOVE demo-byte TO cmd-fwd
+    PERFORM demo-sbyte
+    MOVE demo-byte TO cmd-side
+    IF demo-long = 1
+        CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+            RETURNING demo-byte
+        ADD 1 TO demo-p
+        MOVE demo-byte TO cmd-turn
+        CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+            RETURNING demo-byte
+        ADD 1 TO demo-p
+        COMPUTE cmd-turn = cmd-turn + demo-byte * 256
+    ELSE
+        CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+            RETURNING demo-byte
+        ADD 1 TO demo-p
+        COMPUTE cmd-turn = demo-byte * 256
+    END-IF
+    IF cmd-turn >= 32768
+        SUBTRACT 65536 FROM cmd-turn
+    END-IF
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING cmd-btns
+    ADD 1 TO demo-p
+    .
+
+demo-sbyte.
+    CALL "byte_at" USING BY REFERENCE demo-buf BY VALUE demo-p
+        RETURNING demo-byte
+    ADD 1 TO demo-p
+    IF demo-byte >= 128
+        SUBTRACT 256 FROM demo-byte
+    END-IF
+    .
+
+end-demo.
+    IF sync-open = 1
+        CALL "sync_log_close"
+        MOVE 0 TO sync-open
+    END-IF
+    IF demo-timing = 1
+        PERFORM report-timedemo
+    END-IF
+    MOVE 0 TO demo-on
+    IF demo-attract = 1
+        MOVE 0 TO live-n
+        PERFORM advance-demo
+        EXIT PARAGRAPH
+    END-IF
+    IF demo-single = 1
+        MOVE -1 TO pressed
+    END-IF
+    .
+
+abort-attract.
+    MOVE 0 TO demo-on
+    MOVE 0 TO demo-attract
+    MOVE 0 TO demo-single
+    MOVE 0 TO live-n
+    MOVE 0 TO demo-seq
+    IF pack-n = 1
+        COMPUTE page-tic = 35 * 11
+    ELSE
+        MOVE 170 TO page-tic
+    END-IF
+    MOVE 0 TO mode-n
+    MOVE 0 TO pick-n
+    CALL "mus-title"
+    PERFORM draw-front
+    .
+
+advance-demo.
+    *> Python/Harbour D_DoAdvanceDemo sequence 0..5.
+    MOVE 0 TO demo-on
+    ADD 1 TO demo-seq
+    IF demo-seq > 5
+        MOVE 0 TO demo-seq
+    END-IF
+    IF demo-seq = 0
+        IF pack-n = 1
+            COMPUTE page-tic = 35 * 11
+        ELSE
+            MOVE 170 TO page-tic
+        END-IF
+        MOVE 0 TO mode-n
+        MOVE 0 TO live-n
+        CALL "mus-title"
+        PERFORM draw-front
+        EXIT PARAGRAPH
+    END-IF
+    IF demo-seq = 1
+        MOVE "DEMO1" TO demo-name
+        MOVE 1 TO demo-attract
+        MOVE 0 TO demo-single
+        MOVE 0 TO demo-want-time
+        PERFORM start-demo
+        IF demo-on = 0
+            PERFORM advance-demo
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF demo-seq = 2
+        MOVE 200 TO page-tic
+        MOVE 0 TO mode-n
+        MOVE 0 TO live-n
+        PERFORM draw-front
+        EXIT PARAGRAPH
+    END-IF
+    IF demo-seq = 3
+        MOVE "DEMO2" TO demo-name
+        MOVE 1 TO demo-attract
+        MOVE 0 TO demo-single
+        MOVE 0 TO demo-want-time
+        PERFORM start-demo
+        IF demo-on = 0
+            PERFORM advance-demo
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    IF demo-seq = 4
+        IF pack-n = 1
+            COMPUTE page-tic = 35 * 11
+            CALL "mus-title"
+        ELSE
+            MOVE 200 TO page-tic
+        END-IF
+        MOVE 0 TO mode-n
+        MOVE 0 TO live-n
+        PERFORM draw-front
+        EXIT PARAGRAPH
+    END-IF
+    *> demo-seq = 5
+    MOVE "DEMO3" TO demo-name
+    MOVE 1 TO demo-attract
+    MOVE 0 TO demo-single
+    MOVE 0 TO demo-want-time
+    PERFORM start-demo
+    IF demo-on = 0
+        PERFORM advance-demo
+    END-IF
+    .
+
+report-timedemo.
+    CALL "video_ms" RETURNING now-ms
+    CALL "sub_i32" USING BY VALUE now-ms BY VALUE demo-start-ms
+        RETURNING demo-real
+    IF demo-real < 1
+        MOVE 1 TO demo-real
+    END-IF
+    *> realtics at 35Hz ≈ ms * 35 / 1000
+    COMPUTE demo-byte = demo-real * 35 / 1000
+    IF demo-byte < 1
+        MOVE 1 TO demo-byte
+    END-IF
+    COMPUTE demo-real = demo-gametic * 35 / demo-byte
+    MOVE demo-real TO demo-fps
+    DISPLAY "timed " demo-gametic " gametics ("
+        FUNCTION TRIM(demo-fps) " fps)"
+    MOVE 0 TO demo-timing
     .
 
 note-fps.

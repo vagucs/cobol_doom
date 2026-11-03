@@ -34,6 +34,14 @@
    05 mo-wait BINARY-LONG OCCURS 768 TIMES.
    05 mo-dir BINARY-LONG OCCURS 768 TIMES.
    05 mo-count BINARY-LONG OCCURS 768 TIMES.
+   *> Harbour reactiontime (A_Chase / P_CheckMissileRange).
+   05 mo-react BINARY-LONG OCCURS 768 TIMES.
+   *> P_LookForPlayers lastlook (spawnMobj: P_Random % 4).
+   05 mo-look BINARY-LONG OCCURS 768 TIMES.
    05 mo-mx BINARY-LONG OCCURS 768 TIMES.
    05 mo-my BINARY-LONG OCCURS 768 TIMES.
    05 mo-mz BINARY-LONG OCCURS 768 TIMES.
+   *> 0 = player. Else the monster this one is fighting (P_DamageMobj target).
+   05 mo-tgt BINARY-LONG OCCURS 768 TIMES VALUE 0.
+   *> BASETHRESHOLD. While > 0 a new hit does not steal the target.
+   05 mo-thrs BINARY-LONG OCCURS 768 TIMES VALUE 0.

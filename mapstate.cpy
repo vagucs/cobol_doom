@@ -23,6 +23,9 @@
    05 n-block BINARY-LONG VALUE 0.
    05 reject-n BINARY-LONG VALUE 0.
    05 pool-n BINARY-LONG VALUE 0.
+   *> Harbour R_SetupFrame / R_AddSprites: sectors visited this frame.
+   05 map-validcount BINARY-LONG VALUE 0.
+   05 sec-validcount BINARY-LONG OCCURS 512 TIMES.
    05 blk-org-x BINARY-LONG VALUE 0.
    05 blk-org-y BINARY-LONG VALUE 0.
    05 blk-w BINARY-LONG VALUE 0.
@@ -96,3 +99,14 @@
    05 pool-line BINARY-LONG OCCURS 4096 TIMES.
    05 blk-raw BINARY-LONG OCCURS 16384 TIMES.
    05 reject-buf PIC X(32768).
+   *> P_SpawnSpecials light thinkers (T_LightFlash / T_StrobeFlash).
+   05 n-light BINARY-LONG VALUE 0.
+   05 lt-sec BINARY-LONG OCCURS 64 TIMES.
+   05 lt-kind BINARY-LONG OCCURS 64 TIMES.
+   05 lt-count BINARY-LONG OCCURS 64 TIMES.
+   05 lt-max BINARY-LONG OCCURS 64 TIMES.
+   05 lt-min BINARY-LONG OCCURS 64 TIMES.
+   05 lt-maxt BINARY-LONG OCCURS 64 TIMES.
+   05 lt-mint BINARY-LONG OCCURS 64 TIMES.
+   05 lt-dark BINARY-LONG OCCURS 64 TIMES.
+   05 lt-brit BINARY-LONG OCCURS 64 TIMES.

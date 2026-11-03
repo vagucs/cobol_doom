@@ -1,5 +1,5 @@
 >>SOURCE FORMAT FREE
-*> DOOM generic portado do python_doom para COBOL com SDL2.
+*> DOOM generic portado do python_doom para COBOL com SDL3.
 *>
 *> Por Wagner Nunes da Silva
 *>
@@ -20,7 +20,8 @@ COPY "rdata.cpy".
 COPY "sprstate.cpy".
 COPY "playstate.cpy".
 01 tables-on BINARY-LONG VALUE 0.
-01 finesine BINARY-LONG OCCURS 8192 TIMES.
+*> Extended finesine (vanilla tables.c / Python FINESINE) for fineCos #58/#59.
+01 finesine BINARY-LONG OCCURS 10240 TIMES.
 01 finetangent BINARY-LONG OCCURS 4096 TIMES.
 01 tantoangle BINARY-LONG OCCURS 2049 TIMES.
 01 vat BINARY-LONG OCCURS 4096 TIMES.
@@ -270,7 +271,15 @@ COPY "playstate.cpy".
 01 vis-w BINARY-LONG OCCURS 128 TIMES.
 01 vis-lump BINARY-LONG OCCURS 128 TIMES.
 01 vis-fuzz BINARY-LONG OCCURS 128 TIMES.
+01 vis-cmap BINARY-LONG OCCURS 128 TIMES.
 01 fuzz-on BINARY-LONG.
+01 spr-cmap BINARY-LONG.
+*> Harbour r_draw FUZZTABLE (±1 scanline) + COLORMAP 6.
+01 fuzz-pos BINARY-LONG VALUE 0.
+01 fuzz-ready BINARY-LONG VALUE 0.
+01 fuzz-dir BINARY-LONG OCCURS 50 TIMES.
+01 fuzz-src BINARY-LONG.
+01 fuzz-map BINARY-LONG.
 01 ctop BINARY-LONG OCCURS 320 TIMES.
 01 cbot BINARY-LONG OCCURS 320 TIMES.
 01 patch-buf PIC X(65536).
@@ -317,6 +326,21 @@ COPY "playstate.cpy".
 01 flip-n BINARY-LONG.
 01 spr-rc BINARY-LONG.
 01 cap-n BINARY-LONG.
+01 save-vx BINARY-LONG.
+01 save-vy BINARY-LONG.
+01 bbox-ok BINARY-LONG.
+01 box-x BINARY-LONG.
+01 box-y BINARY-LONG.
+01 box-pos BINARY-LONG.
+01 bb-l BINARY-LONG.
+01 bb-r BINARY-LONG.
+01 bb-b BINARY-LONG.
+01 bb-t BINARY-LONG.
+01 bb-x1 BINARY-LONG.
+01 bb-y1 BINARY-LONG.
+01 bb-x2 BINARY-LONG.
+01 bb-y2 BINARY-LONG.
+01 far-side BINARY-LONG.
 01 spr-w BINARY-LONG.
 01 spr-left BINARY-LONG.
 01 spr-top BINARY-LONG.
@@ -337,7 +361,7 @@ PROCEDURE DIVISION USING fb ink.
 
 main-view.
     IF tables-on = 0
-        CALL "build_finesine" USING BY REFERENCE finesine(1) BY VALUE 8192
+        CALL "build_finesine" USING BY REFERENCE finesine(1) BY VALUE 10240
         CALL "build_finetangent" USING BY REFERENCE finetangent(1)
             BY VALUE 4096
         CALL "build_tantoangle" USING BY REFERENCE tantoangle(1)
@@ -381,6 +405,7 @@ main-view.
         MOVE 0 TO ply-bob
         MOVE 0 TO ply-vbob
         MOVE 0 TO ply-momz
+        MOVE 0 TO ply-atk
         MOVE 2686976 TO ply-vh
         MOVE 0 TO ply-dvh
         MOVE 0 TO ply-tic
@@ -425,6 +450,8 @@ main-view.
         MOVE 2 TO ply-weap
         MOVE 0 TO ply-pend
         END-IF
+        *> M_ClearRandom on load level (Harbour G_DoLoadLevel).
+        CALL "clear-random"
         MOVE 0 TO ply-keep
         MOVE 0 TO ply-inv
         MOVE 0 TO ply-suit
@@ -482,6 +509,8 @@ main-view.
     CALL "add_i32" USING BY VALUE view-z BY VALUE ply-vbob RETURNING view-z
     PERFORM setup-frame
     PERFORM clear-clip
+    *> Harbour R_SetupFrame: bump validcount so sprites gate on visited sectors.
+    ADD 1 TO map-validcount
     MOVE 0 TO n-plane
     MOVE -1 TO flat-have
     PERFORM render-bsp
@@ -662,9 +691,8 @@ setup-frame.
     CALL "sub_i32" USING BY VALUE view-ang BY VALUE ang-90 RETURNING ang-in
     CALL "ushr_i" USING BY VALUE ang-in BY VALUE 19 RETURNING idx
     CALL "bit_and" USING BY VALUE idx BY VALUE 8191 RETURNING idx
-    COMPUTE slot = idx + 2048
-    CALL "bit_and" USING BY VALUE slot BY VALUE 8191 RETURNING slot
-    ADD 1 TO slot
+    *> fineCos: finesine[idx+2048] sem remask (#59).
+    COMPUTE slot = idx + 2048 + 1
     CALL "fixed_div" USING BY VALUE finesine(slot) BY VALUE center-xf
         RETURNING base-xs
     COMPUTE slot = idx + 1
@@ -764,14 +792,25 @@ render-bsp.
                         BY VALUE nd-dx(node-slot) BY VALUE nd-dy(node-slot)
                         BY VALUE view-x BY VALUE view-y
                         RETURNING side-bit
+                    *> Near child always; far only if R_CheckBBox (#68).
                     IF side-bit = 0
-                        MOVE nd-c1(node-slot) TO bsp-push
-                        PERFORM push-stk
+                        MOVE 1 TO far-side
+                        PERFORM load-far-bbox
+                        PERFORM check-bbox
+                        IF bbox-ok = 1
+                            MOVE nd-c1(node-slot) TO bsp-push
+                            PERFORM push-stk
+                        END-IF
                         MOVE nd-c0(node-slot) TO bsp-push
                         PERFORM push-stk
                     ELSE
-                        MOVE nd-c0(node-slot) TO bsp-push
-                        PERFORM push-stk
+                        MOVE 0 TO far-side
+                        PERFORM load-far-bbox
+                        PERFORM check-bbox
+                        IF bbox-ok = 1
+                            MOVE nd-c0(node-slot) TO bsp-push
+                            PERFORM push-stk
+                        END-IF
                         MOVE nd-c1(node-slot) TO bsp-push
                         PERFORM push-stk
                     END-IF
@@ -779,6 +818,160 @@ render-bsp.
             END-IF
         END-IF
     END-PERFORM
+    .
+
+load-far-bbox.
+    *> Node WAD bbox already remapped to L/R/B/T (#69).
+    IF far-side = 0
+        MOVE nd-l0(node-slot) TO bb-l
+        MOVE nd-r0(node-slot) TO bb-r
+        MOVE nd-b0(node-slot) TO bb-b
+        MOVE nd-t0(node-slot) TO bb-t
+    ELSE
+        MOVE nd-l1(node-slot) TO bb-l
+        MOVE nd-r1(node-slot) TO bb-r
+        MOVE nd-b1(node-slot) TO bb-b
+        MOVE nd-t1(node-slot) TO bb-t
+    END-IF
+    .
+
+check-bbox.
+    *> Harbour R_CheckBBox / PHP Render::checkBBox.
+    MOVE 1 TO bbox-ok
+    IF view-x <= bb-l
+        MOVE 0 TO box-x
+    ELSE
+        IF view-x < bb-r
+            MOVE 1 TO box-x
+        ELSE
+            MOVE 2 TO box-x
+        END-IF
+    END-IF
+    IF view-y >= bb-t
+        MOVE 0 TO box-y
+    ELSE
+        IF view-y > bb-b
+            MOVE 1 TO box-y
+        ELSE
+            MOVE 2 TO box-y
+        END-IF
+    END-IF
+    COMPUTE box-pos = box-y * 4 + box-x
+    IF box-pos = 5
+        EXIT PARAGRAPH
+    END-IF
+    *> CHECKCOORD corners (BOXLEFT=0 RIGHT=1 BOTTOM=2 TOP=3).
+    EVALUATE box-pos
+        WHEN 0
+            MOVE bb-r TO bb-x1
+            MOVE bb-t TO bb-y1
+            MOVE bb-l TO bb-x2
+            MOVE bb-b TO bb-y2
+        WHEN 1
+            MOVE bb-r TO bb-x1
+            MOVE bb-t TO bb-y1
+            MOVE bb-l TO bb-x2
+            MOVE bb-t TO bb-y2
+        WHEN 2
+            MOVE bb-r TO bb-x1
+            MOVE bb-b TO bb-y1
+            MOVE bb-l TO bb-x2
+            MOVE bb-t TO bb-y2
+        WHEN 4
+            MOVE bb-l TO bb-x1
+            MOVE bb-t TO bb-y1
+            MOVE bb-l TO bb-x2
+            MOVE bb-b TO bb-y2
+        WHEN 6
+            MOVE bb-r TO bb-x1
+            MOVE bb-b TO bb-y1
+            MOVE bb-r TO bb-x2
+            MOVE bb-t TO bb-y2
+        WHEN 8
+            MOVE bb-l TO bb-x1
+            MOVE bb-t TO bb-y1
+            MOVE bb-r TO bb-x2
+            MOVE bb-b TO bb-y2
+        WHEN 9
+            MOVE bb-l TO bb-x1
+            MOVE bb-b TO bb-y1
+            MOVE bb-r TO bb-x2
+            MOVE bb-b TO bb-y2
+        WHEN 10
+            MOVE bb-l TO bb-x1
+            MOVE bb-b TO bb-y1
+            MOVE bb-r TO bb-x2
+            MOVE bb-t TO bb-y2
+        WHEN OTHER
+            EXIT PARAGRAPH
+    END-EVALUATE
+    MOVE bb-x1 TO px
+    MOVE bb-y1 TO py
+    PERFORM point-to-angle
+    CALL "sub_i32" USING BY VALUE ang-out BY VALUE view-ang RETURNING a1
+    MOVE bb-x2 TO px
+    MOVE bb-y2 TO py
+    PERFORM point-to-angle
+    CALL "sub_i32" USING BY VALUE ang-out BY VALUE view-ang RETURNING a2
+    CALL "sub_i32" USING BY VALUE a1 BY VALUE a2 RETURNING span-a
+    CALL "uge_u32" USING BY VALUE span-a BY VALUE ang-180 RETURNING bit-n
+    IF bit-n = 1
+        EXIT PARAGRAPH
+    END-IF
+    CALL "add_i32" USING BY VALUE a1 BY VALUE clip-a RETURNING tspan
+    CALL "ugt_u32" USING BY VALUE tspan BY VALUE two-clip RETURNING bit-n
+    IF bit-n = 1
+        CALL "sub_i32" USING BY VALUE tspan BY VALUE two-clip RETURNING tspan
+        CALL "uge_u32" USING BY VALUE tspan BY VALUE span-a RETURNING bit-n
+        IF bit-n = 1
+            MOVE 0 TO bbox-ok
+            EXIT PARAGRAPH
+        END-IF
+        MOVE clip-a TO a1
+    END-IF
+    CALL "sub_i32" USING BY VALUE clip-a BY VALUE a2 RETURNING tspan
+    CALL "ugt_u32" USING BY VALUE tspan BY VALUE two-clip RETURNING bit-n
+    IF bit-n = 1
+        CALL "sub_i32" USING BY VALUE tspan BY VALUE two-clip RETURNING tspan
+        CALL "uge_u32" USING BY VALUE tspan BY VALUE span-a RETURNING bit-n
+        IF bit-n = 1
+            MOVE 0 TO bbox-ok
+            EXIT PARAGRAPH
+        END-IF
+        CALL "sub_i32" USING BY VALUE 0 BY VALUE clip-a RETURNING a2
+    END-IF
+    CALL "add_i32" USING BY VALUE a1 BY VALUE ang-90 RETURNING tmp
+    CALL "ushr_i" USING BY VALUE tmp BY VALUE 19 RETURNING idx
+    CALL "bit_and" USING BY VALUE idx BY VALUE 4095 RETURNING idx
+    COMPUTE slot = idx + 1
+    MOVE vat(slot) TO x1
+    CALL "add_i32" USING BY VALUE a2 BY VALUE ang-90 RETURNING tmp
+    CALL "ushr_i" USING BY VALUE tmp BY VALUE 19 RETURNING idx
+    CALL "bit_and" USING BY VALUE idx BY VALUE 4095 RETURNING idx
+    COMPUTE slot = idx + 1
+    MOVE vat(slot) TO x2
+    IF x1 = x2
+        MOVE 0 TO bbox-ok
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE last-x = x2 - 1
+    MOVE x1 TO first-x
+    *> Harbour: walk sentinel (last=+∞); no early-out on newend (#71).
+    MOVE 0 TO start-i
+    PERFORM UNTIL 0 = 1
+        COMPUTE slot = start-i + 1
+        IF solid-b(slot) >= last-x
+            EXIT PERFORM
+        END-IF
+        ADD 1 TO start-i
+        IF start-i >= 127
+            EXIT PERFORM
+        END-IF
+    END-PERFORM
+    COMPUTE slot = start-i + 1
+    IF first-x >= solid-a(slot) AND last-x <= solid-b(slot)
+        MOVE 0 TO bbox-ok
+    END-IF
     .
 
 push-stk.
@@ -801,6 +994,8 @@ draw-sub.
     IF front-sec < 1 OR front-sec > n-sector
         EXIT PARAGRAPH
     END-IF
+    *> Harbour R_AddSprites: mark sector visited this frame (#66).
+    MOVE map-validcount TO sec-validcount(front-sec)
     CALL "ushr_i" USING BY VALUE sec-flight(front-sec) BY VALUE 4
         RETURNING light-n
     ADD extra-l TO light-n
@@ -811,16 +1006,24 @@ draw-sub.
         MOVE 15 TO light-n
     END-IF
     COMPUTE wall-base = light-n * 48
-    MOVE sec-floor-h(front-sec) TO want-h
-    MOVE sec-floor-pic(front-sec) TO want-pic
-    MOVE sec-flight(front-sec) TO want-light
-    PERFORM find-plane
-    MOVE pl-out TO floor-pl
-    MOVE sec-ceil-h(front-sec) TO want-h
-    MOVE sec-ceil-pic(front-sec) TO want-pic
-    MOVE sec-flight(front-sec) TO want-light
-    PERFORM find-plane
-    MOVE pl-out TO ceil-pl
+    *> Harbour R_Subsector: no floor/ceiling plane on the wrong side of viewz (#73).
+    MOVE 0 TO floor-pl
+    IF sec-floor-h(front-sec) < view-z
+        MOVE sec-floor-h(front-sec) TO want-h
+        MOVE sec-floor-pic(front-sec) TO want-pic
+        MOVE sec-flight(front-sec) TO want-light
+        PERFORM find-plane
+        MOVE pl-out TO floor-pl
+    END-IF
+    MOVE 0 TO ceil-pl
+    IF sec-ceil-h(front-sec) > view-z
+        OR sec-ceil-pic(front-sec) = sky-flat
+        MOVE sec-ceil-h(front-sec) TO want-h
+        MOVE sec-ceil-pic(front-sec) TO want-pic
+        MOVE sec-flight(front-sec) TO want-light
+        PERFORM find-plane
+        MOVE pl-out TO ceil-pl
+    END-IF
     MOVE ss-begin(sub-slot) TO seg-i
     PERFORM ss-n(sub-slot) TIMES
         COMPUTE cur-seg = seg-i + 1
@@ -1738,9 +1941,7 @@ draw-flat.
             CALL "bit_and" USING BY VALUE idx BY VALUE 8191 RETURNING idx
             COMPUTE slot = idx + 1
             MOVE finesine(slot) TO sin-v
-            COMPUTE slot = idx + 2048
-            CALL "bit_and" USING BY VALUE slot BY VALUE 8191 RETURNING slot
-            ADD 1 TO slot
+            COMPUTE slot = idx + 2048 + 1
             MOVE finesine(slot) TO cos-v
             PERFORM VARYING y-i FROM t1 BY 1 UNTIL y-i > y-end
                 CALL "fixed_mul" USING BY VALUE plane-h BY VALUE yslope(y-i + 1)
@@ -1887,10 +2088,10 @@ sine-at.
     .
 
 cos-at.
+    *> Harbour fineCos: finesine[idx+2048] sem remask (#59).
     CALL "ushr_i" USING BY VALUE ang-in BY VALUE 19 RETURNING idx
-    ADD 2048 TO idx
     CALL "bit_and" USING BY VALUE idx BY VALUE 8191 RETURNING idx
-    COMPUTE slot = idx + 1
+    COMPUTE slot = idx + 2048 + 1
     MOVE finesine(slot) TO sin-out
     .
 
@@ -2209,9 +2410,7 @@ weapon-origin.
     END-IF
     COMPUTE tmp = ply-tic * 128
     CALL "bit_and" USING BY VALUE tmp BY VALUE 8191 RETURNING idx
-    COMPUTE slot = idx + 2048
-    CALL "bit_and" USING BY VALUE slot BY VALUE 8191 RETURNING slot
-    ADD 1 TO slot
+    COMPUTE slot = idx + 2048 + 1
     CALL "fixed_mul" USING BY VALUE ply-bob BY VALUE finesine(slot)
         RETURNING tmp
     CALL "add_i32" USING BY VALUE 65536 BY VALUE tmp RETURNING gun-sx
@@ -2241,6 +2440,8 @@ draw-weapon.
     .
 
 paint-gun.
+    *> Weapon is never MF_SHADOW — clear leftover spectre fuzz.
+    MOVE 0 TO fuzz-on
     MOVE 1 TO gun-clip
     CALL "wad-find" USING gun-name cur-lump
     IF cur-lump < 0
@@ -2330,6 +2531,20 @@ project-thing.
         EXIT PARAGRAPH
     END-IF
     IF n-vis >= 128
+        EXIT PARAGRAPH
+    END-IF
+    *> Harbour: skip sprites whose sector was not visited this BSP frame (#67).
+    MOVE view-x TO save-vx
+    MOVE view-y TO save-vy
+    MOVE mo-x(mo-i) TO view-x
+    MOVE mo-y(mo-i) TO view-y
+    PERFORM point-in-sub
+    MOVE save-vx TO view-x
+    MOVE save-vy TO view-y
+    IF sec-slot < 1 OR sec-slot > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    IF sec-validcount(sec-slot) NOT = map-validcount
         EXIT PARAGRAPH
     END-IF
     CALL "sub_i32" USING BY VALUE mo-x(mo-i) BY VALUE view-x
@@ -2441,6 +2656,31 @@ project-thing.
     IF bit-n NOT = 0
         MOVE 1 TO vis-fuzz(n-vis)
     END-IF
+    *> Harbour R_ProjectSprite: scalelight[sector][scale], else fullbright.
+    MOVE 0 TO spr-cmap
+    CALL "bit_and" USING BY VALUE mo-frame(mo-i) BY VALUE 32768
+        RETURNING bit-n
+    IF bit-n = 0
+        CALL "ushr_i" USING BY VALUE sec-flight(sec-slot) BY VALUE 4
+            RETURNING light-n
+        ADD extra-l TO light-n
+        IF light-n < 0
+            MOVE 0 TO light-n
+        END-IF
+        IF light-n > 15
+            MOVE 15 TO light-n
+        END-IF
+        CALL "ushr_i" USING BY VALUE xsc-v BY VALUE 12 RETURNING idx
+        IF idx > 47
+            MOVE 47 TO idx
+        END-IF
+        IF idx < 0
+            MOVE 0 TO idx
+        END-IF
+        COMPUTE slot = light-n * 48 + idx + 1
+        MOVE scale-light(slot) TO spr-cmap
+    END-IF
+    MOVE spr-cmap TO vis-cmap(n-vis)
     .
 
 sort-vis.
@@ -2478,6 +2718,7 @@ paint-sprite.
     MOVE vis-w(vis-k) TO cur-w
     MOVE vis-lump(vis-k) TO cur-lump
     MOVE vis-fuzz(vis-k) TO fuzz-on
+    MOVE vis-cmap(vis-k) TO spr-cmap
     MOVE 65536 TO cap-n
     CALL "wad-read-num" USING cur-lump patch-buf cap-n patch-len
     IF patch-len < 8
@@ -2583,6 +2824,8 @@ clip-one-seg.
     .
 
 on-seg-side.
+    *> Harbour/Python R_PointOnSegSide: full fixed ldx/ldy, then >>FRACBITS
+    *> (16) once — never >>8 on top of >>16 (was effective >>24).
     MOVE 1 TO side-bit
     IF ds-seg(di) < 1 OR ds-seg(di) > n-seg
         EXIT PARAGRAPH
@@ -2592,9 +2835,9 @@ on-seg-side.
     IF v1-slot < 1 OR v2-slot < 1
         EXIT PARAGRAPH
     END-IF
-    CALL "delta_shr16" USING BY VALUE vtx-x(v2-slot)
+    CALL "sub_i32" USING BY VALUE vtx-x(v2-slot)
         BY VALUE vtx-x(v1-slot) RETURNING ldx
-    CALL "delta_shr16" USING BY VALUE vtx-y(v2-slot)
+    CALL "sub_i32" USING BY VALUE vtx-y(v2-slot)
         BY VALUE vtx-y(v1-slot) RETURNING ldy
     IF ldx = 0
         IF cur-gx <= vtx-x(v1-slot)
@@ -2632,9 +2875,9 @@ on-seg-side.
         RETURNING dx
     CALL "sub_i32" USING BY VALUE cur-gy BY VALUE vtx-y(v1-slot)
         RETURNING dy
-    CALL "shar32" USING BY VALUE ldy BY VALUE 8 RETURNING tmp
+    CALL "shar32" USING BY VALUE ldy BY VALUE 16 RETURNING tmp
     CALL "fixed_mul" USING BY VALUE tmp BY VALUE dx RETURNING left-v
-    CALL "shar32" USING BY VALUE ldx BY VALUE 8 RETURNING tmp
+    CALL "shar32" USING BY VALUE ldx BY VALUE 16 RETURNING tmp
     CALL "fixed_mul" USING BY VALUE dy BY VALUE tmp RETURNING right-v
     IF right-v < left-v
         MOVE 0 TO side-bit
@@ -2691,6 +2934,15 @@ paint-column.
         IF yh > tmp
             MOVE tmp TO yh
         END-IF
+        IF fuzz-on = 1
+            IF yl <= 0
+                MOVE 1 TO yl
+            END-IF
+            COMPUTE tmp = view-h - 2
+            IF yh >= tmp
+                MOVE tmp TO yh
+            END-IF
+        END-IF
         IF yl <= yh
             CALL "spr_texfrac" USING BY VALUE center-yf BY VALUE cur-mid
                 BY VALUE cur-sc BY VALUE top-d BY VALUE yl BY VALUE y-is
@@ -2703,20 +2955,15 @@ paint-column.
                 IF idx >= 0 AND idx < post-len
                     COMPUTE at-pos = (y-i + view-oy) * 320 + x-i + view-ox
                     IF fuzz-on = 1
-                        IF y-i > 0
-                            COMPUTE dest-at = at-pos - 320
-                            CALL "byte_at" USING BY REFERENCE fb
-                                BY VALUE dest-at RETURNING byte-n
-                            CALL "poke_byte" USING BY REFERENCE fb
-                                BY VALUE at-pos BY VALUE byte-n
-                        END-IF
+                        PERFORM draw-fuzz-pix
                     ELSE
                         COMPUTE dest-at = src-at + idx
                         IF dest-at >= 0 AND dest-at < patch-len
                             CALL "byte_at" USING BY REFERENCE patch-buf
                                 BY VALUE dest-at RETURNING pix
+                            COMPUTE fuzz-map = spr-cmap * 256 + pix
                             CALL "byte_at" USING BY REFERENCE cmap-buf
-                                BY VALUE pix RETURNING byte-n
+                                BY VALUE fuzz-map RETURNING byte-n
                             CALL "poke_byte" USING BY REFERENCE fb
                                 BY VALUE at-pos BY VALUE byte-n
                         END-IF
@@ -2728,6 +2975,51 @@ paint-column.
         END-IF
         COMPUTE post-at = post-at + post-len + 4
     END-PERFORM
+    .
+
+draw-fuzz-pix.
+    *> R_DrawFuzzColumn: neighbour ±FUZZTABLE*SCREENWIDTH, then COLORMAP 6.
+    IF fuzz-ready = 0
+        PERFORM init-fuzz-table
+    END-IF
+    ADD 1 TO fuzz-pos
+    IF fuzz-pos > 50
+        MOVE 1 TO fuzz-pos
+    END-IF
+    COMPUTE fuzz-src = at-pos + fuzz-dir(fuzz-pos) * 320
+    IF fuzz-src < 0 OR fuzz-src >= 64000
+        MOVE at-pos TO fuzz-src
+    END-IF
+    CALL "byte_at" USING BY REFERENCE fb BY VALUE fuzz-src
+        RETURNING pix
+    COMPUTE fuzz-map = 1536 + pix
+    IF fuzz-map < 0 OR fuzz-map >= cmap-n
+        MOVE pix TO byte-n
+    ELSE
+        CALL "byte_at" USING BY REFERENCE cmap-buf BY VALUE fuzz-map
+            RETURNING byte-n
+    END-IF
+    CALL "poke_byte" USING BY REFERENCE fb BY VALUE at-pos
+        BY VALUE byte-n
+    .
+
+init-fuzz-table.
+    *> Exact Harbour/Python _FUZZ_DIR (50 entries).
+    MOVE 1 TO fuzz-dir(1) fuzz-dir(3) fuzz-dir(5) fuzz-dir(6)
+        fuzz-dir(8) fuzz-dir(9) fuzz-dir(11) fuzz-dir(12)
+        fuzz-dir(13) fuzz-dir(15) fuzz-dir(16) fuzz-dir(17)
+        fuzz-dir(22) fuzz-dir(25) fuzz-dir(26) fuzz-dir(27)
+        fuzz-dir(28) fuzz-dir(30) fuzz-dir(32) fuzz-dir(33)
+        fuzz-dir(36) fuzz-dir(37) fuzz-dir(42) fuzz-dir(43)
+        fuzz-dir(44) fuzz-dir(45) fuzz-dir(47) fuzz-dir(48)
+        fuzz-dir(50)
+    MOVE -1 TO fuzz-dir(2) fuzz-dir(4) fuzz-dir(7) fuzz-dir(10)
+        fuzz-dir(14) fuzz-dir(18) fuzz-dir(19) fuzz-dir(20)
+        fuzz-dir(21) fuzz-dir(23) fuzz-dir(24) fuzz-dir(29)
+        fuzz-dir(31) fuzz-dir(34) fuzz-dir(35) fuzz-dir(38)
+        fuzz-dir(39) fuzz-dir(40) fuzz-dir(41) fuzz-dir(46)
+        fuzz-dir(49)
+    MOVE 1 TO fuzz-ready
     .
 
 END PROGRAM view-frame.
