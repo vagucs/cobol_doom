@@ -102,6 +102,9 @@ COPY "playstate.cpy".
 01 new-len BINARY-LONG.
 01 slide-ok BINARY-LONG.
 01 slide-n BINARY-LONG.
+01 cross-mode BINARY-LONG.
+01 cross-busy BINARY-LONG.
+01 cross-moved BINARY-LONG.
 01 rem-n BINARY-LONG.
 01 dda-n BINARY-LONG.
 01 dda-i BINARY-LONG.
@@ -109,6 +112,7 @@ COPY "playstate.cpy".
 01 tr-dx BINARY-LONG.
 01 tr-dy BINARY-LONG.
 01 trace-mode BINARY-LONG.
+01 did-move BINARY-LONG.
 
 LINKAGE SECTION.
 01 k-up BINARY-LONG.
@@ -138,6 +142,10 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
     IF ply-hp > 0 AND (walk-phase = 0 OR walk-phase = 1)
     *> Demo: ticcmd forwardmove/sidemove/angleturn (python player_think).
     IF demo-on = 1
+        *> Post-teleport reactiontime: no angleturn and no thrust.
+        IF ply-rtel > 0
+            SUBTRACT 1 FROM ply-rtel
+        ELSE
         MOVE cmd-fwd TO fwd-n
         MOVE cmd-side TO side-n
         MOVE cmd-turn TO turn-n
@@ -176,7 +184,11 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
                     RETURNING ply-momy
             END-IF
         END-IF
+        END-IF
     ELSE
+        IF ply-rtel > 0
+            SUBTRACT 1 FROM ply-rtel
+        ELSE
     MOVE 0 TO speed-n
     IF k-shift NOT = 0
         MOVE 1 TO speed-n
@@ -278,6 +290,14 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
     END-IF
     END-IF
     END-IF
+    END-IF
+    *> Dead: no thrust. P_XYMovement still sees the ticcmd, so a held
+    *> key keeps friction going under STOPSPEED instead of a hard stop.
+    IF ply-hp <= 0 AND demo-on = 1
+        AND (walk-phase = 0 OR walk-phase = 1)
+        MOVE cmd-fwd TO fwd-n
+        MOVE cmd-side TO side-n
+    END-IF
     *> P_DeathThink yaws once per tic, inside playerThink, before movers.
     IF ply-hp <= 0 AND walk-phase NOT = 2
         PERFORM death-yaw
@@ -286,7 +306,9 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
     IF walk-phase = 1
         GOBACK
     END-IF
+    MOVE 0 TO did-move
     IF ply-momx NOT = 0 OR ply-momy NOT = 0
+        MOVE 1 TO did-move
         IF ply-momx > 1966080
             MOVE 1966080 TO ply-momx
         END-IF
@@ -335,9 +357,9 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
                 IF hit-n = 0
                     PERFORM accept-spot
                 ELSE
+                    *> P_XYMovement keeps the halved remainder after a slide.
+                    *> Zeroing it drops the second stairstep along the wall.
                     PERFORM player-slide
-                    MOVE 0 TO xmove-n
-                    MOVE 0 TO ymove-n
                 END-IF
             END-IF
         END-PERFORM
@@ -356,6 +378,11 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         ELSE
             PERFORM apply-friction
         END-IF
+    END-IF
+    *> P_TouchSpecialThing runs inside P_TryMove, before P_ZMovement.
+    *> After the fall, a rocket more than 8 units below the old z looks close enough.
+    IF ply-hp > 0 AND did-move = 1
+        CALL "item-tic"
     END-IF
     PERFORM apply-z
     IF ply-z <= ply-floor
@@ -381,9 +408,6 @@ PROCEDURE DIVISION USING k-up k-down k-left k-right
         CALL "fixed_mul" USING BY VALUE half-b BY VALUE sn RETURNING ply-vbob
     END-IF
     ADD 1 TO ply-tic
-    IF ply-hp > 0
-        CALL "item-tic"
-    END-IF
     GOBACK.
 
 apply-friction.
@@ -455,6 +479,11 @@ accept-spot.
     MOVE floor-z TO ply-floor
     MOVE ceil-z TO ply-ceil
     MOVE spot-sec TO ply-room
+    *> Remember the step so a slide dogleg can cross a walk trigger.
+    IF ply-clip = 0
+        MOVE 6 TO cross-mode
+        CALL "door-act" USING cross-mode cross-busy cross-moved
+    END-IF
     .
 
 player-slide.
@@ -810,16 +839,10 @@ pit-things.
                 RETURNING dy
             CALL "abs_fixed_i" USING BY VALUE dy RETURNING dy
             IF dx < dist-n AND dy < dist-n
-                CALL "add_i32" USING BY VALUE mo-z(mo-i) BY VALUE mo-h(mo-i)
-                    RETURNING top-z
-                CALL "add_i32" USING BY VALUE ply-z BY VALUE ply-h
-                    RETURNING tmp
-                IF ply-z >= top-z OR mo-z(mo-i) >= tmp
-                    CONTINUE
-                ELSE
-                    MOVE 1 TO hit-n
-                    EXIT PERFORM
-                END-IF
+                *> PIT_CheckThing: a solid blocks the player in XY.
+                *> Height is not tested, so a body on the ledge above still stops the step.
+                MOVE 1 TO hit-n
+                EXIT PERFORM
             END-IF
         END-IF
     END-PERFORM
@@ -1048,16 +1071,25 @@ death-yaw.
     CALL "sub_i32" USING BY VALUE aim-ang BY VALUE ply-ang
         RETURNING delta-ang
     *> ANG5 = ANG90/18. Snap only while the gap is strictly inside it.
+    *> ANG90/18 is 59652323.555. The snap test uses that float, so a gap
+    *> of exactly 59652323 still faces the attacker.
     CALL "sub_i32" USING BY VALUE 0 BY VALUE ang5-n RETURNING tmp
-    IF delta-ang > tmp AND delta-ang < ang5-n
+    IF delta-ang > tmp AND delta-ang <= ang5-n
         MOVE aim-ang TO ply-ang
     ELSE
         IF delta-ang > 0
             CALL "add_i32" USING BY VALUE ply-ang BY VALUE ang5-n
                 RETURNING ply-ang
         ELSE
-            CALL "sub_i32" USING BY VALUE ply-ang BY VALUE ang5-n
-                RETURNING ply-ang
+            *> int(angle - ANG90/18) truncates toward zero, so the turn
+            *> is 59652324 while the unsigned angle is at least that.
+            IF ply-ang >= 0 AND ply-ang < 59652324
+                CALL "sub_i32" USING BY VALUE ply-ang BY VALUE ang5-n
+                    RETURNING ply-ang
+            ELSE
+                CALL "sub_i32" USING BY VALUE ply-ang BY VALUE 59652324
+                    RETURNING ply-ang
+            END-IF
         END-IF
     END-IF
     .

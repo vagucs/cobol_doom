@@ -36,23 +36,31 @@ static int win_h = 0;
 static int fullscreen = 0;
 static int sdl_up = 0;
 
-static void toggle_fullscreen(void)
+static int window_locked(void)
 {
+    SDL_WindowFlags flags;
+
+    if (window == NULL)
+        return 1;
+    flags = SDL_GetWindowFlags(window);
+    if (fullscreen)
+        return 1;
+    if (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED))
+        return 1;
+    return 0;
+}
+
+static void toggle_maximize(void)
+{
+    SDL_WindowFlags flags;
+
     if (window == NULL)
         return;
-    if (!fullscreen) {
-        SDL_GetWindowSize(window, &win_w, &win_h);
-        if (SDL_SetWindowFullscreen(window, true))
-            fullscreen = 1;
-        return;
-    }
-    if (SDL_SetWindowFullscreen(window, false)) {
-        fullscreen = 0;
-        if (win_w > 0 && win_h > 0)
-            SDL_SetWindowSize(window, win_w, win_h);
-        SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED);
-    }
+    flags = SDL_GetWindowFlags(window);
+    if (flags & SDL_WINDOW_MAXIMIZED)
+        SDL_RestoreWindow(window);
+    else
+        SDL_MaximizeWindow(window);
 }
 
 static void ignore_mouse(void)
@@ -76,7 +84,8 @@ int video_init(int w, int h, int scale, int vsync)
         return 2;
     sdl_up = 1;
     ignore_mouse();
-    window = SDL_CreateWindow("DOOM", w * scale, h * scale, 0);
+    window = SDL_CreateWindow("DOOM", w * scale, h * scale,
+        SDL_WINDOW_RESIZABLE);
     if (window == NULL)
         return 3;
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
@@ -154,7 +163,7 @@ int video_set_scale(int scale)
         scale = 4;
     win_w = tex_w * scale;
     win_h = tex_h * scale;
-    if (fullscreen)
+    if (window_locked())
         return 0;
     SDL_SetWindowSize(window, win_w, win_h);
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED,
@@ -226,7 +235,7 @@ int video_poll(void)
             && (event.key.key == SDLK_RETURN
                 || event.key.key == SDLK_KP_ENTER)
             && (event.key.mod & SDL_KMOD_ALT)) {
-            toggle_fullscreen();
+            toggle_maximize();
             continue;
         }
         if (found == 0 && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat)

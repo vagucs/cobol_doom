@@ -99,7 +99,7 @@ main-status.
     MOVE 44 TO pen-x
     MOVE 171 TO pen-y
     MOVE ply-ammo TO num-v
-    IF ply-weap = 3
+    IF ply-weap = 3 OR ply-weap = 9
         MOVE ply-shell TO num-v
     END-IF
     IF ply-weap = 5
@@ -369,7 +369,7 @@ draw-arms.
         COMPUTE pen-y = 172 + band-n * 10
         ADD 1 TO gi GIVING slot-n
         MOVE 0 TO have-n
-        IF gi = 0 AND ply-sg = 1
+        IF gi = 0 AND (ply-sg = 1 OR ply-ssg = 1)
             MOVE 1 TO have-n
         END-IF
         IF gi = 1 AND ply-cg = 1

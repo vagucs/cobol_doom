@@ -10,7 +10,8 @@
 *> www.vagucs.com.br
 *>
 *> Armas na ordem do Doom: 1 soco, 2 pistola, 3 espingarda,
-*> 4 metralhadora, 5 missil, 6 plasma, 7 BFG. Sem rato.
+*> 4 metralhadora, 5 missil, 6 plasma, 7 BFG, 8 motosserra,
+*> 9 super shotgun. Sem rato.
 IDENTIFICATION DIVISION.
 PROGRAM-ID. gun-tic.
 
@@ -78,6 +79,7 @@ WORKING-STORAGE SECTION.
 01 shoot-z BINARY-LONG.
 01 half-h BINARY-LONG.
 01 aim-sl BINARY-LONG.
+01 base-sl BINARY-LONG.
 01 aim-mo BINARY-LONG.
 01 aim-span BINARY-LONG VALUE 40960.
 01 win-top BINARY-LONG.
@@ -399,7 +401,6 @@ tick-gun.
     END-IF
     PERFORM saw-idle
     IF ply-pend NOT = 0 AND ply-pend NOT = ply-weap
-        PERFORM capture-bob
         MOVE 2 TO gun-mode
         PERFORM lower-gun
         EXIT PARAGRAPH
@@ -411,7 +412,6 @@ tick-gun.
             MOVE 0 TO go-n
         END-IF
         IF go-n = 1
-            PERFORM capture-bob
             MOVE 1 TO gun-mode
             MOVE 0 TO gun-step
             MOVE 1 TO gun-down
@@ -420,7 +420,6 @@ tick-gun.
         END-IF
     END-IF
     IF fire-held = 1 AND can-n = 0 AND ply-on = 1
-        PERFORM capture-bob
         PERFORM pick-fallback
         IF ply-pend NOT = ply-weap
             MOVE 2 TO gun-mode
@@ -430,6 +429,10 @@ tick-gun.
     IF fire-held = 0
         MOVE 0 TO gun-down
         MOVE 0 TO gun-refire
+    END-IF
+    *> A_WeaponReady stores WEAPONTOP+bob. The next tic's A_Lower keeps it.
+    IF gun-mode = 0
+        PERFORM capture-bob
     END-IF
     .
 
@@ -447,8 +450,15 @@ read-choice.
         MOVE 2 TO ply-pend
     END-IF
     CALL "video_key" USING BY VALUE 51 RETURNING key-n
-    IF key-n = 1 AND ply-sg = 1
-        MOVE 3 TO ply-pend
+    IF key-n = 1
+        *> Shotgun key prefers the super shotgun until it is already out.
+        IF ply-ssg = 1 AND ply-weap NOT = 9
+            MOVE 9 TO ply-pend
+        ELSE
+            IF ply-sg = 1
+                MOVE 3 TO ply-pend
+            END-IF
+        END-IF
     END-IF
     CALL "video_key" USING BY VALUE 52 RETURNING key-n
     IF key-n = 1 AND ply-cg = 1
@@ -487,10 +497,17 @@ read-choice.
             MOVE 8 TO key-n
         END-IF
     END-IF
-    IF key-n < 1 OR key-n > 8 OR key-n = ply-weap
+    *> BT_CHANGE slot 3 selects the SSG unless it is already the ready weapon.
+    IF key-n = 3 AND ply-ssg = 1 AND ply-weap NOT = 9
+        MOVE 9 TO key-n
+    END-IF
+    IF key-n < 1 OR key-n > 9 OR key-n = ply-weap
         EXIT PARAGRAPH
     END-IF
     IF key-n = 3 AND ply-sg = 0
+        EXIT PARAGRAPH
+    END-IF
+    IF key-n = 9 AND ply-ssg = 0
         EXIT PARAGRAPH
     END-IF
     IF key-n = 4 AND ply-cg = 0
@@ -523,6 +540,11 @@ can-fire.
     END-IF
     IF ply-weap = 3
         IF ply-shell >= 1
+            MOVE 1 TO can-n
+        END-IF
+    END-IF
+    IF ply-weap = 9
+        IF ply-shell >= 2
             MOVE 1 TO can-n
         END-IF
     END-IF
@@ -629,6 +651,9 @@ set-body.
     IF ply-weap = 8
         MOVE "SAWGC0" TO gun-body
     END-IF
+    IF ply-weap = 9
+        MOVE "SHT2A0" TO gun-body
+    END-IF
     MOVE SPACES TO gun-flash
     .
 
@@ -656,6 +681,10 @@ enter-step.
     END-IF
     IF ply-weap = 3
         PERFORM step-shot
+        EXIT PARAGRAPH
+    END-IF
+    IF ply-weap = 9
+        PERFORM step-ssg
         EXIT PARAGRAPH
     END-IF
     IF ply-weap = 4
@@ -784,24 +813,39 @@ try-refire.
     .
 
 capture-bob.
-    *> A_WeaponReady left psp->sy at WEAPONTOP+bob. A_Lower continues from there.
-    IF ply-bob = 0 OR ply-tic < 1
+    *> A_WeaponReady bob, from the post-thrust mom (before this tic's friction).
+    CALL "fixed_mul" USING BY VALUE ply-momx BY VALUE ply-momx
+        RETURNING dx
+    CALL "fixed_mul" USING BY VALUE ply-momy BY VALUE ply-momy
+        RETURNING dy
+    CALL "add_i32" USING BY VALUE dx BY VALUE dy RETURNING tmp
+    DIVIDE tmp BY 4 GIVING tmp
+    IF tmp > 1048576
+        MOVE 1048576 TO tmp
+    END-IF
+    IF tmp <= 0
+        MOVE 0 TO gun-lift
         EXIT PARAGRAPH
     END-IF
-    COMPUTE tmp = (ply-tic - 1) * 128
+    MOVE tmp TO dx
+    COMPUTE tmp = ply-tic * 128
     CALL "bit_and" USING BY VALUE tmp BY VALUE 4095 RETURNING tmp
     CALL "shl_i" USING BY VALUE tmp BY VALUE 19 RETURNING tmp
     CALL "fine_sin_ang" USING BY VALUE tmp RETURNING sn
-    CALL "fixed_mul" USING BY VALUE ply-bob BY VALUE sn RETURNING gun-lift
+    CALL "fixed_mul" USING BY VALUE dx BY VALUE sn RETURNING gun-lift
     IF gun-lift < 0
         MOVE 0 TO gun-lift
     END-IF
     .
 
 pick-fallback.
-    *> P_CheckAmmo preference: plasma, chaingun, shotgun, pistol, saw, rocket, bfg, fist.
+    *> P_CheckAmmo: plasma, SSG (shells > 2), chaingun, shotgun, pistol, saw, rocket, bfg, fist.
     IF ply-pg = 1 AND ply-cell >= 1
         MOVE 6 TO ply-pend
+        EXIT PARAGRAPH
+    END-IF
+    IF ply-ssg = 1 AND ply-shell > 2
+        MOVE 9 TO ply-pend
         EXIT PARAGRAPH
     END-IF
     IF ply-cg = 1 AND ply-ammo >= 1
@@ -833,7 +877,6 @@ pick-fallback.
 
 go-ready.
     MOVE 0 TO gun-mode
-    MOVE 0 TO gun-lift
     PERFORM set-body
     MOVE 0 TO gun-tics
     IF fire-held = 0
@@ -958,6 +1001,77 @@ step-shot.
     IF gun-step = 8
         MOVE "SHTGA0" TO gun-body
         MOVE 7 TO gun-tics
+    END-IF
+    MOVE 1 TO moved-out
+    .
+
+step-ssg.
+    IF gun-step >= 10
+        PERFORM atk-cycle-end
+        IF gun-mode NOT = 1
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    *> DSGUN9 and DSGUN10 call A_ReFire and skip the rest of the frame.
+    IF gun-step = 8 OR gun-step = 9
+        PERFORM try-refire
+        IF gun-mode = 2
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    *> DSGUN4 A_CheckReload: two shells or lower, then the frame still plays.
+    IF gun-step = 3
+        PERFORM can-fire
+        IF can-n = 0
+            PERFORM pick-fallback
+            MOVE 2 TO gun-mode
+            PERFORM lower-gun
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
+    IF gun-step = 0
+        MOVE "SHT2A0" TO gun-body
+        MOVE 3 TO gun-tics
+        PERFORM mark-noise
+    END-IF
+    IF gun-step = 1
+        MOVE "SHT2A0" TO gun-body
+        MOVE 7 TO gun-tics
+        MOVE "SHT2I0" TO gun-flash
+        MOVE 9 TO gun-flash-n
+        PERFORM shot-ssg
+    END-IF
+    IF gun-step = 2
+        MOVE "SHT2B0" TO gun-body
+        MOVE 7 TO gun-tics
+    END-IF
+    IF gun-step = 3
+        MOVE "SHT2C0" TO gun-body
+        MOVE 7 TO gun-tics
+    END-IF
+    IF gun-step = 4
+        MOVE "SHT2D0" TO gun-body
+        MOVE 7 TO gun-tics
+    END-IF
+    IF gun-step = 5
+        MOVE "SHT2E0" TO gun-body
+        MOVE 7 TO gun-tics
+    END-IF
+    IF gun-step = 6
+        MOVE "SHT2F0" TO gun-body
+        MOVE 7 TO gun-tics
+    END-IF
+    IF gun-step = 7
+        MOVE "SHT2G0" TO gun-body
+        MOVE 6 TO gun-tics
+    END-IF
+    IF gun-step = 8
+        MOVE "SHT2H0" TO gun-body
+        MOVE 6 TO gun-tics
+    END-IF
+    IF gun-step = 9
+        MOVE "SHT2A0" TO gun-body
+        MOVE 5 TO gun-tics
     END-IF
     MOVE 1 TO moved-out
     .
@@ -1291,6 +1405,43 @@ shot-gun.
         CALL "mul_i32" USING BY VALUE rnd-a BY VALUE 262144 RETURNING tmp
         CALL "add_i32" USING BY VALUE shot-ang BY VALUE tmp
             RETURNING shot-ang
+        PERFORM fire-ray
+    END-PERFORM
+    .
+
+shot-ssg.
+    IF ply-on = 0 OR ply-shell < 2
+        EXIT PARAGRAPH
+    END-IF
+    SUBTRACT 2 FROM ply-shell
+    MOVE "dshtgn" TO snd-name
+    CALL "sfx-play" USING snd-name
+    DIVIDE ply-h BY 2 GIVING half-h
+    CALL "add_i32" USING BY VALUE half-h BY VALUE 524288 RETURNING tmp
+    CALL "add_i32" USING BY VALUE ply-z BY VALUE tmp RETURNING shoot-z
+    PERFORM bullet-slope
+    MOVE aim-sl TO base-sl
+    *> 20 pellets: damage, (R-R)<<19 angle, (R-R)<<5 on the shared slope.
+    PERFORM VARYING pellet-n FROM 1 BY 1 UNTIL pellet-n > 20
+        PERFORM take-rnd
+        DIVIDE rnd-n BY 3 GIVING q-n REMAINDER rem-n
+        ADD 1 TO rem-n
+        MULTIPLY rem-n BY 5 GIVING dmg
+        MOVE ply-ang TO shot-ang
+        PERFORM take-rnd
+        MOVE rnd-n TO rnd-a
+        PERFORM take-rnd
+        SUBTRACT rnd-n FROM rnd-a
+        CALL "mul_i32" USING BY VALUE rnd-a BY VALUE 524288 RETURNING tmp
+        CALL "add_i32" USING BY VALUE shot-ang BY VALUE tmp
+            RETURNING shot-ang
+        PERFORM take-rnd
+        MOVE rnd-n TO rnd-a
+        PERFORM take-rnd
+        SUBTRACT rnd-n FROM rnd-a
+        CALL "mul_i32" USING BY VALUE rnd-a BY VALUE 32 RETURNING tmp
+        CALL "add_i32" USING BY VALUE base-sl BY VALUE tmp
+            RETURNING aim-sl
         PERFORM fire-ray
     END-PERFORM
     .
@@ -2039,12 +2190,21 @@ thrust-thing.
         RETURNING aim-ang
     MOVE 100 TO mass-n
     IF mo-name(who-i) = "SARG" OR mo-name(who-i) = "HEAD"
-        OR mo-name(who-i) = "PAIN" OR mo-name(who-i) = "SKUL"
+        OR mo-name(who-i) = "PAIN"
         MOVE 400 TO mass-n
+    END-IF
+    IF mo-name(who-i) = "SKUL"
+        MOVE 50 TO mass-n
+    END-IF
+    IF mo-name(who-i) = "VILE" OR mo-name(who-i) = "SKEL"
+        MOVE 500 TO mass-n
+    END-IF
+    IF mo-name(who-i) = "BSPI"
+        MOVE 600 TO mass-n
     END-IF
     IF mo-name(who-i) = "BOSS" OR mo-name(who-i) = "BOS2"
         OR mo-name(who-i) = "SPID" OR mo-name(who-i) = "CYBR"
-        OR mo-name(who-i) = "VILE" OR mo-name(who-i) = "FATT"
+        OR mo-name(who-i) = "FATT"
         MOVE 1000 TO mass-n
     END-IF
     *> thrust = damage * (FRACUNIT/8) * 100 / mass
@@ -2145,7 +2305,7 @@ flinch.
             IF mo-name(who-i) = "SKEL" OR mo-name(who-i) = "VILE"
                 MOVE 9 TO mo-wait(who-i)
             END-IF
-            IF mo-name(who-i) = "PAIN"
+            IF mo-name(who-i) = "PAIN" OR mo-name(who-i) = "HEAD"
                 MOVE 11 TO mo-wait(who-i)
             END-IF
             IF mo-name(who-i) = "TROO"
@@ -2158,19 +2318,18 @@ flinch.
     *> Always clear reactiontime; wake idle → chase (spawnstate only).
     MOVE 0 TO mo-react(who-i)
     *> P_DamageMobj: a monster source steals the target when threshold is 0.
-    IF mo-name(who-i) NOT = "BAR1"
-        IF hit-who > 0 AND hit-who NOT = who-i
-            AND mo-name(hit-who) NOT = "VILE"
-            IF mo-thrs(who-i) = 0 OR mo-name(who-i) = "VILE"
-                MOVE hit-who TO mo-tgt(who-i)
-                MOVE 100 TO mo-thrs(who-i)
-            END-IF
-        ELSE
-            IF hit-who = 0
-                AND (mo-thrs(who-i) = 0 OR mo-name(who-i) = "VILE")
-                MOVE 0 TO mo-tgt(who-i)
-                MOVE 100 TO mo-thrs(who-i)
-            END-IF
+    *> Barrels keep it too. A_Explode blames that shooter, so the corpse yaws.
+    IF hit-who > 0 AND hit-who NOT = who-i
+        AND mo-name(hit-who) NOT = "VILE"
+        IF mo-thrs(who-i) = 0 OR mo-name(who-i) = "VILE"
+            MOVE hit-who TO mo-tgt(who-i)
+            MOVE 100 TO mo-thrs(who-i)
+        END-IF
+    ELSE
+        IF hit-who = 0
+            AND (mo-thrs(who-i) = 0 OR mo-name(who-i) = "VILE")
+            MOVE 0 TO mo-tgt(who-i)
+            MOVE 100 TO mo-thrs(who-i)
         END-IF
     END-IF
     IF mo-ai(who-i) = 0 AND mo-frame(who-i) = 0
@@ -2228,8 +2387,23 @@ a-scream.
     IF mo-seq(who-i) = 3
         MOVE "sgtdth" TO snd-name
     END-IF
+    *> Chaingunner deathsound is podth2, still P_Random%3. Gib is slop.
     IF mo-seq(who-i) = 4
-        MOVE "podth2" TO snd-name
+        IF mo-hp(who-i) < -70
+            MOVE "slop" TO snd-name
+        ELSE
+            PERFORM take-rnd
+            DIVIDE rnd-n BY 3 GIVING q-n REMAINDER rem-n
+            IF rem-n = 0
+                MOVE "podth1" TO snd-name
+            END-IF
+            IF rem-n = 1
+                MOVE "podth2" TO snd-name
+            END-IF
+            IF rem-n = 2
+                MOVE "podth3" TO snd-name
+            END-IF
+        END-IF
     END-IF
     IF mo-seq(who-i) = 5
         IF mo-name(who-i) = "HEAD"
@@ -2340,6 +2514,10 @@ start-death.
     COMPUTE slot = (mo-seq(who-i) - 1) * 8 + 1
     MOVE die-fr(slot) TO mo-frame(who-i)
     MOVE die-tic(slot) TO mo-tic(who-i)
+    *> S_SKULL_DIE* is 6 tics. Seq 5 is shared with the 8-tic caco strip.
+    IF mo-name(who-i) = "SKUL"
+        MOVE 6 TO mo-tic(who-i)
+    END-IF
     IF mo-name(who-i) = "POSS" AND mo-hp(who-i) < -20
         MOVE 12 TO mo-frame(who-i)
         MOVE 5 TO mo-tic(who-i)
@@ -2728,7 +2906,7 @@ splash-player.
         PERFORM locate-bolt
         MOVE sec-at TO vict-sec
         MOVE 1 TO splash-see
-        IF spot-sec >= 1 AND vict-sec >= 1 AND spot-sec NOT = vict-sec
+        IF spot-sec >= 1 AND vict-sec >= 1
             COMPUTE pnum = (spot-sec - 1) * n-sector + (vict-sec - 1)
             DIVIDE pnum BY 8 GIVING byte-i REMAINDER rem-n
             IF byte-i >= 0 AND byte-i < reject-n
@@ -2745,7 +2923,7 @@ splash-player.
                 END-IF
             END-IF
         END-IF
-        IF splash-see = 1 AND spot-sec NOT = vict-sec
+        IF splash-see = 1
             MOVE spot-x TO ox
             MOVE spot-y TO oy
             CALL "sub_i32" USING BY VALUE ply-x BY VALUE ox
@@ -2872,7 +3050,7 @@ splash-one.
     .
 
 splash-los.
-    *> P_CheckSight-ish: same sector → yes; REJECT block → no; else line walk.
+    *> P_CheckSight: REJECT, then the line walk. Same sector is not an open view.
     MOVE 1 TO splash-see
     MOVE spot-x TO walk-x
     MOVE spot-y TO walk-y
@@ -2883,9 +3061,6 @@ splash-los.
     PERFORM locate-bolt
     MOVE sec-at TO vict-sec
     IF spot-sec < 1 OR vict-sec < 1
-        EXIT PARAGRAPH
-    END-IF
-    IF spot-sec = vict-sec
         EXIT PARAGRAPH
     END-IF
     COMPUTE pnum = (spot-sec - 1) * n-sector + (vict-sec - 1)
@@ -3272,8 +3447,11 @@ corpse-next.
     ELSE
         MOVE die-fr(slot) TO mo-frame(who-i)
         MOVE die-tic(slot) TO mo-tic(who-i)
+        IF mo-name(who-i) = "SKUL" AND mo-tic(who-i) > 0
+            MOVE 6 TO mo-tic(who-i)
+        END-IF
         *> DIE2 = A_Scream. A_Fall clears MF_SOLID:
-        *> POSS/SPOS/SSWV step 3; TROO/SARG step 4.
+        *> POSS/SPOS/SSWV/CPOS step 3; TROO/SARG step 4.
         IF mo-step(who-i) = 2
             *> Vanilla runs A_Scream inside this mobj's thinker, after
             *> earlier mobjs have already consumed P_Random.
@@ -3282,11 +3460,16 @@ corpse-next.
         *> Clear SOLID after this tic's player move (thinker is after P_XYMovement).
         IF mo-step(who-i) = 3
             AND (mo-name(who-i) = "POSS" OR mo-name(who-i) = "SPOS"
-                OR mo-name(who-i) = "SSWV")
+                OR mo-name(who-i) = "SSWV" OR mo-name(who-i) = "CPOS")
             MOVE 99 TO mo-react(who-i)
         END-IF
         IF mo-step(who-i) = 4
-            AND (mo-name(who-i) = "TROO" OR mo-name(who-i) = "SARG")
+            AND (mo-name(who-i) = "TROO" OR mo-name(who-i) = "SARG"
+                OR mo-name(who-i) = "SKUL")
+            MOVE 99 TO mo-react(who-i)
+        END-IF
+        *> S_HEAD_DIE5 is A_Fall. PAIN/SKUL share this strip.
+        IF mo-step(who-i) = 5 AND mo-name(who-i) = "HEAD"
             MOVE 99 TO mo-react(who-i)
         END-IF
     END-IF

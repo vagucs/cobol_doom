@@ -301,8 +301,10 @@ spawn-light-rng.
                 MOVE 15 TO rem-n
                 PERFORM spawn-strobe
                 MOVE 4 TO sec-special(i)
-            WHEN spec-n = 8 OR spec-n = 17
+            WHEN spec-n = 8
                 MOVE 0 TO sec-special(i)
+            WHEN spec-n = 17
+                PERFORM spawn-fire
             WHEN spec-n = 12
                 MOVE 35 TO rem-n
                 MOVE 1 TO q-n
@@ -384,6 +386,25 @@ spawn-strobe-body.
     IF spec-n NOT = 4
         MOVE 0 TO sec-special(i)
     END-IF
+    .
+
+spawn-fire.
+    *> P_SpawnFireFlicker: count 4, minlight = surrounding + 16. No spawn RNG.
+    IF n-light >= 64
+        MOVE 0 TO sec-special(i)
+        EXIT PARAGRAPH
+    END-IF
+    ADD 1 TO n-light
+    MOVE i TO lt-sec(n-light)
+    MOVE 3 TO lt-kind(n-light)
+    MOVE sec-flight(i) TO lt-max(n-light)
+    MOVE i TO sec-slot
+    MOVE sec-flight(i) TO light-min
+    PERFORM min-surround-light
+    ADD 16 TO light-min
+    MOVE light-min TO lt-min(n-light)
+    MOVE 4 TO lt-count(n-light)
+    MOVE 0 TO sec-special(i)
     .
 
 min-surround-light.
@@ -485,16 +506,20 @@ spawn-tics-of.
     IF bit-n NOT = 0
         MOVE 10 TO spawn-tics
     END-IF
+    *> S_FATT_STND is 15 tics. Every other monster stand state is 10.
+    IF mo-name(n-mobj) = "FATT"
+        MOVE 15 TO spawn-tics
+    END-IF
     IF mo-name(n-mobj) = "SKUL"
         MOVE 10 TO spawn-tics
     END-IF
-    IF mo-name(n-mobj) = "BAR1"
+    IF mo-name(n-mobj) = "BAR1" OR mo-name(n-mobj) = "POL6"
         MOVE 6 TO spawn-tics
     END-IF
-    *> Powerups/armor with spawnstate tics>0 (SUIT is -1 — no jitter).
+    *> Powerups/armor with spawnstate tics>0. SUIT and PSTR are -1.
     IF mo-name(n-mobj) = "BON1" OR mo-name(n-mobj) = "BON2"
         OR mo-name(n-mobj) = "SOUL" OR mo-name(n-mobj) = "MEGA"
-        OR mo-name(n-mobj) = "PINV" OR mo-name(n-mobj) = "PSTR"
+        OR mo-name(n-mobj) = "PINV"
         OR mo-name(n-mobj) = "PINS"
         OR mo-name(n-mobj) = "PMAP" OR mo-name(n-mobj) = "PVIS"
         OR mo-name(n-mobj) = "ARM1" OR mo-name(n-mobj) = "ARM2"
@@ -506,14 +531,19 @@ spawn-tics-of.
         OR mo-name(n-mobj) = "RSKU" OR mo-name(n-mobj) = "YSKU"
         MOVE 10 TO spawn-tics
     END-IF
+    *> SMIT/TRE1/TRE2 spawnstate tics is -1. Short lamps are 4.
     IF mo-name(n-mobj) = "SMIT" OR mo-name(n-mobj) = "TRE1"
-        OR mo-name(n-mobj) = "TRE2" OR mo-name(n-mobj) = "SMBT"
-        OR mo-name(n-mobj) = "SMGT" OR mo-name(n-mobj) = "SMRT"
+        OR mo-name(n-mobj) = "TRE2"
         MOVE 0 TO spawn-tics
     END-IF
+    *> COLU (2028) spawnstate tics is -1: no jitter. E1M3 has six of
+    *> them; rolling anyway shifted P_Random before the first tic.
+    *> Short torches and the blue/green/red tech lamps are 4.
     IF mo-name(n-mobj) = "FCAN" OR mo-name(n-mobj) = "FSKU"
-        OR mo-name(n-mobj) = "COLU" OR mo-name(n-mobj) = "TLMP"
-        OR mo-name(n-mobj) = "TLP2"
+        OR mo-name(n-mobj) = "TLMP" OR mo-name(n-mobj) = "TLP2"
+        OR mo-name(n-mobj) = "TBLU" OR mo-name(n-mobj) = "TGRN"
+        OR mo-name(n-mobj) = "TRED" OR mo-name(n-mobj) = "SMBT"
+        OR mo-name(n-mobj) = "SMGT" OR mo-name(n-mobj) = "SMRT"
         MOVE 4 TO spawn-tics
     END-IF
     .
@@ -571,19 +601,48 @@ set-hp.
     END-IF
     IF mo-name(n-mobj) = "SKUL"
         MOVE 100 TO mo-hp(n-mobj)
+        MOVE 1048576 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "BAR1"
         MOVE 20 TO mo-hp(n-mobj)
         MOVE 655360 TO mo-rad(n-mobj)
     END-IF
-    IF mo-name(n-mobj) = "CYBR"
-        MOVE 4000 TO mo-hp(n-mobj)
+    *> Columns, lamps and the short tree are 16 units. The tall tree is 32.
+    *> Pickups stay at the 20 set in place-one. E1M3's ELEC was blocking
+    *> the player four units early.
+    IF mo-name(n-mobj) = "ELEC" OR mo-name(n-mobj) = "COLU"
+        OR mo-name(n-mobj) = "COL1" OR mo-name(n-mobj) = "COL2"
+        OR mo-name(n-mobj) = "COL3" OR mo-name(n-mobj) = "COL4"
+        OR mo-name(n-mobj) = "TLMP" OR mo-name(n-mobj) = "TLP2"
+        OR mo-name(n-mobj) = "CEYE" OR mo-name(n-mobj) = "FSKU"
+        OR mo-name(n-mobj) = "TRE1" OR mo-name(n-mobj) = "SMIT"
+        OR mo-name(n-mobj) = "CAND" OR mo-name(n-mobj) = "CBRA"
+        OR mo-name(n-mobj) = "TBLU" OR mo-name(n-mobj) = "TGRN"
+        OR mo-name(n-mobj) = "TRED"
+        OR mo-name(n-mobj) = "SMBT" OR mo-name(n-mobj) = "SMGT"
+        OR mo-name(n-mobj) = "SMRT"
+        OR mo-name(n-mobj) = "POL1" OR mo-name(n-mobj) = "POL2"
+        OR mo-name(n-mobj) = "POL4" OR mo-name(n-mobj) = "POL5"
+        OR mo-name(n-mobj) = "POL6"
+        OR mo-name(n-mobj) = "GOR1" OR mo-name(n-mobj) = "GOR2"
+        OR mo-name(n-mobj) = "GOR3" OR mo-name(n-mobj) = "GOR4"
+        OR mo-name(n-mobj) = "GOR5"
+        MOVE 1048576 TO mo-rad(n-mobj)
     END-IF
-    IF mo-name(n-mobj) = "SPID"
-        MOVE 3000 TO mo-hp(n-mobj)
+    IF mo-name(n-mobj) = "TRE2"
+        MOVE 2097152 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "BSPI"
         MOVE 500 TO mo-hp(n-mobj)
+        MOVE 4194304 TO mo-rad(n-mobj)
+    END-IF
+    IF mo-name(n-mobj) = "CYBR"
+        MOVE 4000 TO mo-hp(n-mobj)
+        MOVE 2621440 TO mo-rad(n-mobj)
+    END-IF
+    IF mo-name(n-mobj) = "SPID"
+        MOVE 3000 TO mo-hp(n-mobj)
+        MOVE 8388608 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "VILE"
         MOVE 700 TO mo-hp(n-mobj)
@@ -593,9 +652,11 @@ set-hp.
     END-IF
     IF mo-name(n-mobj) = "FATT"
         MOVE 600 TO mo-hp(n-mobj)
+        MOVE 3145728 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "PAIN"
         MOVE 400 TO mo-hp(n-mobj)
+        MOVE 2031616 TO mo-rad(n-mobj)
     END-IF
     IF mo-name(n-mobj) = "SSWV"
         MOVE 50 TO mo-hp(n-mobj)
@@ -700,6 +761,20 @@ PROCEDURE DIVISION.
                     MOVE lt-min(li) TO sec-flight(sec-i)
                     MOVE lt-dark(li) TO lt-count(li)
                 END-IF
+            END-IF
+            IF lt-kind(li) = 3
+                *> T_FireFlicker: (P_Random & 3) * 16, then count = 4.
+                CALL "p-random" USING rnd-n
+                CALL "bit_and" USING BY VALUE rnd-n BY VALUE 3
+                    RETURNING rem-n
+                MULTIPLY rem-n BY 16 GIVING rem-n
+                COMPUTE rnd-n = sec-flight(sec-i) - rem-n
+                IF rnd-n < lt-min(li)
+                    MOVE lt-min(li) TO sec-flight(sec-i)
+                ELSE
+                    COMPUTE sec-flight(sec-i) = lt-max(li) - rem-n
+                END-IF
+                MOVE 4 TO lt-count(li)
             END-IF
         END-IF
     END-PERFORM

@@ -26,6 +26,8 @@
    05 fl-wait BINARY-LONG OCCURS 32 TIMES.
    05 fl-high BINARY-LONG OCCURS 32 TIMES.
    05 fl-kind BINARY-LONG OCCURS 32 TIMES.
+   *> Bottom of a down/wait/up lift, so a blocked rise can go back down.
+   05 fl-low BINARY-LONG OCCURS 32 TIMES.
    05 pend-tag BINARY-LONG VALUE 0.
    05 cross-ln BINARY-LONG.
    05 cross-who BINARY-LONG.

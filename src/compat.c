@@ -461,8 +461,10 @@ static int divline_side(int ox, int oy, int tdx, int tdy, int x, int y)
     return right < left ? 0 : 1;
 }
 
-/* Harbour P_CheckSight side: >>16 products, no sign-xor shortcut. */
-static int sight_side(int x, int y, int lx, int ly, int ldx, int ldy)
+/* Harbour P_CheckSight side: >>16 products, no sign-xor shortcut.
+   Deltas stay 64-bit so a long sight does not wrap before the shift. */
+static int sight_side64(int x, int y, int lx, int ly,
+    long long ldx, long long ldy)
 {
     long long dx;
     long long dy;
@@ -486,13 +488,26 @@ static int sight_side(int x, int y, int lx, int ly, int ldx, int ldy)
     }
     dx = ((long long)x - lx) >> 16;
     dy = ((long long)y - ly) >> 16;
-    left = ((long long)(ldy >> 16)) * dx;
-    right = dy * (long long)(ldx >> 16);
+    left = (ldy >> 16) * dx;
+    right = dy * (ldx >> 16);
     if (right < left)
         return 0;
     if (left == right)
         return 2;
     return 1;
+}
+
+int sight_side(int x, int y, int lx, int ly, int ldx, int ldy)
+{
+    return sight_side64(x, y, lx, ly, ldx, ldy);
+}
+
+/* Side of (x,y) against the sight from (ox,oy) to (tx,ty). */
+int sight_trace_side(int x, int y, int ox, int oy, int tx, int ty)
+{
+    return sight_side64(x, y, ox, oy,
+        (long long)tx - (long long)ox,
+        (long long)ty - (long long)oy);
 }
 
 /* 1 if the sight segment crosses the linedef. Frac is along the sight. */
@@ -520,12 +535,14 @@ int sight_frac(int ox, int oy, int tx, int ty,
     den = as_i32((long long)fixed_mul(shar32(ldy, 8), tdx)
         - (long long)fixed_mul(shar32(ldx, 8), tdy));
     if (den == 0)
-        return 1;
+        return -1;
     num = as_i32((long long)fixed_mul(shar32(as_i32((long long)v1x - ox), 8), ldy)
         + (long long)fixed_mul(shar32(as_i32((long long)oy - v1y), 8), ldx));
     frac = fixed_div(num, den);
+    /* Out of (0,1] is a miss. Returning 1 made the sight scan treat it as a
+     * hit at the eye and close the window on a wall the ray never crosses. */
     if (frac <= 0 || frac >= 65536)
-        return 1;
+        return -1;
     return frac;
 }
 

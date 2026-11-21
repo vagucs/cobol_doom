@@ -122,3 +122,9 @@
    05 ray-mo BINARY-LONG VALUE 0.
    *> P_DamageMobj source. 0 = none or the player himself.
    05 ply-atk BINARY-LONG VALUE 0.
+   *> P_TouchSpecialThing bonuscount. Gold palette, not the red pain shift.
+   05 ply-bonus BINARY-LONG VALUE 0.
+   *> Super shotgun (weapon 9, logged as 8). Separate from ply-sg.
+   05 ply-ssg BINARY-LONG VALUE 0.
+   *> EV_Teleport sets reactiontime to 18. P_PlayerThink skips cmd while it lasts.
+   05 ply-rtel BINARY-LONG VALUE 0.

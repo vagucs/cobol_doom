@@ -88,6 +88,7 @@ try-one.
             END-IF
         END-IF
         CALL "sfx-play" USING snd-name
+        ADD 6 TO ply-bonus
         ADD 1 TO ply-items
         MOVE SPACES TO mo-name(mo-i)
         MOVE 0 TO mo-flags(mo-i)
@@ -212,7 +213,7 @@ apply-item.
         MOVE 1 TO took
     END-IF
     *> P_GiveWeapon: placed = 2 clips; MF_DROPPED = 1; pending só se arma nova.
-    IF item-n = "SHOT" OR item-n = "SGN2"
+    IF item-n = "SHOT"
         MOVE 2 TO which-n
         MOVE 2 TO pack-n
         CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
@@ -226,6 +227,23 @@ apply-item.
             MOVE 1 TO took
             IF ply-weap NOT = 3
                 MOVE 3 TO ply-pend
+            END-IF
+        END-IF
+    END-IF
+    IF item-n = "SGN2"
+        MOVE 2 TO which-n
+        MOVE 2 TO pack-n
+        CALL "bit_and" USING BY VALUE mo-flags(mo-i) BY VALUE 131072
+            RETURNING bit-n
+        IF bit-n NOT = 0
+            MOVE 1 TO pack-n
+        END-IF
+        PERFORM give-pack
+        IF ply-ssg = 0
+            MOVE 1 TO ply-ssg
+            MOVE 1 TO took
+            IF ply-weap NOT = 9
+                MOVE 9 TO ply-pend
             END-IF
         END-IF
     END-IF

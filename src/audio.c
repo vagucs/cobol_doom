@@ -45,6 +45,21 @@ static voice_t voices[VOICES];
 static int sfx_volume = 8;
 static int music_volume = 8;
 static int music_on;
+static int callback_on;
+static CRITICAL_SECTION audio_cs;
+static int audio_cs_ok;
+
+static void lock_audio(void)
+{
+    if (audio_cs_ok)
+        EnterCriticalSection(&audio_cs);
+}
+
+static void unlock_audio(void)
+{
+    if (audio_cs_ok)
+        LeaveCriticalSection(&audio_cs);
+}
 
 static int16_t *decode_dmx(const unsigned char *data, int len, int *out_n)
 {
@@ -149,43 +164,87 @@ static void mix_frames(int16_t *out, int frames)
     }
 }
 
-/* PHP queues from the game thread. The device callback on this SDL3
- * build never reached the speakers; music still played because it is MCI. */
-void audio_pump(void)
+/* The device thread calls audio_feed while a demo frame is still drawing.
+ * cap_bytes is the fallback when that callback could not be opened. */
+static void audio_pump_bytes(int cap_bytes)
 {
-    int16_t buf[1024];
+    static int16_t buf[8192];
     int queued;
     int bytes;
     int frames;
     int v;
     int any;
+    int guard;
 
-    if (stream == NULL)
+    if (stream == NULL || cap_bytes < 2)
         return;
-    any = 0;
-    for (v = 0; v < VOICES; v++) {
-        if (voices[v].on) {
-            any = 1;
-            break;
+    if (SDL_AudioStreamDevicePaused(stream))
+        SDL_ResumeAudioStreamDevice(stream);
+    for (guard = 0; guard < 4; guard++) {
+        any = 0;
+        for (v = 0; v < VOICES; v++) {
+            if (voices[v].on) {
+                any = 1;
+                break;
+            }
         }
+        if (!any)
+            return;
+        queued = SDL_GetAudioStreamQueued(stream);
+        if (queued < 0 || queued >= cap_bytes)
+            return;
+        bytes = cap_bytes - queued;
+        if (bytes > (int)sizeof(buf))
+            bytes = (int)sizeof(buf);
+        bytes &= ~1;
+        frames = bytes / 2;
+        if (frames < 1)
+            return;
+        SDL_LockAudioStream(stream);
+        mix_frames(buf, frames);
+        SDL_UnlockAudioStream(stream);
+        if (!SDL_PutAudioStreamData(stream, buf, bytes))
+            return;
     }
-    if (!any)
+}
+
+static void SDLCALL audio_feed(void *userdata, SDL_AudioStream *out,
+    int additional, int total)
+{
+    int16_t buf[2048];
+    int bytes;
+    int frames;
+
+    (void)userdata;
+    (void)total;
+    while (additional >= 2) {
+        bytes = additional;
+        if (bytes > (int)sizeof(buf))
+            bytes = (int)sizeof(buf);
+        bytes &= ~1;
+        frames = bytes / 2;
+        lock_audio();
+        mix_frames(buf, frames);
+        unlock_audio();
+        if (!SDL_PutAudioStreamData(out, buf, bytes))
+            return;
+        additional -= bytes;
+    }
+}
+
+void audio_pump(void)
+{
+    if (callback_on)
         return;
-    queued = SDL_GetAudioStreamQueued(stream);
     /* 16-bit mono, three periods at 11025 Hz (~139 ms). */
-    if (queued >= 512 * 2 * 3)
+    audio_pump_bytes(512 * 2 * 3);
+}
+
+void audio_pump_ahead(void)
+{
+    if (callback_on)
         return;
-    bytes = 512 * 2 * 3 - queued;
-    if (bytes > (int)sizeof(buf))
-        bytes = (int)sizeof(buf);
-    bytes &= ~1;
-    frames = bytes / 2;
-    if (frames < 1)
-        return;
-    SDL_LockAudioStream(stream);
-    mix_frames(buf, frames);
-    SDL_UnlockAudioStream(stream);
-    SDL_PutAudioStreamData(stream, buf, bytes);
+    audio_pump_bytes(11025);
 }
 
 int audio_init(void)
@@ -194,18 +253,32 @@ int audio_init(void)
 
     if (stream != NULL)
         return 0;
+    if (!audio_cs_ok) {
+        InitializeCriticalSection(&audio_cs);
+        audio_cs_ok = 1;
+    }
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
         return 1;
     SDL_zero(want);
     want.freq = 11025;
     want.format = SDL_AUDIO_S16;
     want.channels = 1;
+    callback_on = 1;
     stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
-        &want, NULL, NULL);
+        &want, audio_feed, NULL);
+    if (stream == NULL) {
+        callback_on = 0;
+        stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+            &want, NULL, NULL);
+    }
     if (stream == NULL)
         return 1;
-    if (!SDL_ResumeAudioStreamDevice(stream))
+    if (!SDL_ResumeAudioStreamDevice(stream)) {
+        SDL_DestroyAudioStream(stream);
+        stream = NULL;
+        callback_on = 0;
         return 1;
+    }
     return 0;
 }
 
@@ -239,10 +312,10 @@ int audio_play(unsigned char *data, int len, char *name)
 
     if (stream == NULL || data == NULL || name == NULL || len < 16)
         return 0;
-    SDL_LockAudioStream(stream);
+    lock_audio();
     clip = take_clip(data, len, name);
     if (clip == NULL) {
-        SDL_UnlockAudioStream(stream);
+        unlock_audio();
         return 0;
     }
     slot = -1;
@@ -266,8 +339,9 @@ int audio_play(unsigned char *data, int len, char *name)
     voices[slot].clip = clip;
     voices[slot].pos = 0;
     voices[slot].on = 1;
-    SDL_UnlockAudioStream(stream);
-    audio_pump();
+    unlock_audio();
+    if (!callback_on)
+        audio_pump();
     return 0;
 }
 

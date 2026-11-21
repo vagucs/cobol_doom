@@ -268,19 +268,20 @@ PROCEDURE DIVISION.
         CALL "video_poll" RETURNING pressed
         CALL "music_pump"
         IF pressed NOT = -1
+            *> ESC opens the menu. During attract, any key does too.
+            *> Quitting is the menu item. A second ESC resumes the demo.
             IF mode-n = 3 AND pressed = 27
-                IF demo-attract = 1
-                    PERFORM abort-attract
-                ELSE
-                    MOVE 1 TO mode-n
-                    MOVE 1 TO live-n
-                    MOVE 0 TO pick-n
-                    PERFORM draw-front
-                END-IF
+                MOVE 1 TO mode-n
+                MOVE 1 TO live-n
+                MOVE 0 TO pick-n
+                PERFORM draw-front
             ELSE
-            IF mode-n = 3 AND demo-attract = 1 AND pressed NOT = 0
-                AND pressed NOT = -1
-                PERFORM abort-attract
+            IF mode-n = 3 AND demo-attract = 1 AND demo-single = 0
+                AND pressed NOT = 0 AND pressed NOT = -1
+                MOVE 1 TO mode-n
+                MOVE 1 TO live-n
+                MOVE 0 TO pick-n
+                PERFORM draw-front
             ELSE
             IF mode-n = 6
                 PERFORM finale-step
@@ -455,6 +456,9 @@ PROCEDURE DIVISION.
                                 walk-phase
                             MOVE 1 TO draw-now
                         END-IF
+                        MOVE 8 TO act-mode
+                        CALL "door-act" USING act-mode door-busy
+                            door-moved
                         *> Map mobjs think before a rocket spawned mid-level:
                         *> it was linked at the end of the list.
                         MOVE 0 TO foe-pass
@@ -484,11 +488,15 @@ PROCEDURE DIVISION.
                             SUBTRACT 1 FROM ply-pain
                             MOVE 1 TO draw-now
                         END-IF
+                        IF ply-bonus > 0
+                            SUBTRACT 1 FROM ply-bonus
+                            MOVE 1 TO draw-now
+                        END-IF
                         IF ply-fwait > 0
                             SUBTRACT 1 FROM ply-fwait
                             MOVE 1 TO draw-now
                         END-IF
-                        IF demo-on = 1
+                        IF demo-timing = 1
                             PERFORM write-sync-line
                         END-IF
                         ADD 1 TO ply-time
@@ -503,6 +511,9 @@ PROCEDURE DIVISION.
                         MOVE 1 TO draw-now
                     END-IF
                     IF draw-now = 1 AND ply-exit NOT = 1
+                        IF demo-on = 1
+                            CALL "audio_pump_ahead"
+                        END-IF
                         PERFORM paint-view
                     END-IF
                     IF ply-exit = 1
@@ -643,14 +654,10 @@ front-keys.
         EXIT PARAGRAPH
     END-IF
     IF mode-n = 0
-        IF pressed = 27
-            MOVE -1 TO pressed
-        ELSE
-            MOVE 1 TO mode-n
-            MOVE 0 TO pick-n
-            MOVE 0 TO demo-attract
-            PERFORM draw-front
-        END-IF
+        MOVE 1 TO mode-n
+        MOVE 0 TO pick-n
+        MOVE 0 TO demo-attract
+        PERFORM draw-front
         EXIT PARAGRAPH
     END-IF
     IF mode-n = 4
@@ -1290,8 +1297,24 @@ paint-screen.
             END-IF
         END-IF
     END-IF
-    IF flash-n <= 0 AND rad-n = 0
+    IF flash-n <= 0 AND rad-n = 0 AND ply-bonus <= 0
         CALL "video_upload" USING fb pal
+        EXIT PARAGRAPH
+    END-IF
+    IF flash-n <= 0 AND ply-bonus > 0
+        IF pal-n < 9984
+            CALL "video_upload" USING fb pal
+            EXIT PARAGRAPH
+        END-IF
+        ADD ply-bonus TO 7 GIVING pain-pal
+        DIVIDE pain-pal BY 8 GIVING pain-pal
+        IF pain-pal > 3
+            MOVE 3 TO pain-pal
+        END-IF
+        ADD 9 TO pain-pal
+        COMPUTE pal-at = pain-pal * 768 + 1
+        MOVE pal(pal-at:768) TO pal-now
+        CALL "video_upload" USING fb pal-now
         EXIT PARAGRAPH
     END-IF
     IF rad-n = 1
@@ -1522,7 +1545,7 @@ start-demo.
     MOVE 3 TO mode-n
     MOVE 0 TO last-ms
     CALL "video_ms" RETURNING demo-start-ms
-    IF sync-open = 0
+    IF demo-timing = 1 AND sync-open = 0
         CALL "sync_log_open" RETURNING rc
         IF rc = 0
             MOVE 1 TO sync-open

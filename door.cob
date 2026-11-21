@@ -82,6 +82,14 @@ WORKING-STORAGE SECTION.
 01 saw-on BINARY-LONG VALUE 0.
 01 saw-x BINARY-LONG.
 01 saw-y BINARY-LONG.
+01 path-n BINARY-LONG VALUE 0.
+01 path-x BINARY-LONG OCCURS 8 TIMES.
+01 path-y BINARY-LONG OCCURS 8 TIMES.
+01 pi BINARY-LONG.
+01 seg-x BINARY-LONG.
+01 seg-y BINARY-LONG.
+01 leg-x BINARY-LONG.
+01 leg-y BINARY-LONG.
 01 fl-i BINARY-LONG.
 01 nb-h BINARY-LONG.
 01 got-nb BINARY-LONG.
@@ -129,6 +137,10 @@ WORKING-STORAGE SECTION.
 01 open-bot BINARY-LONG.
 01 touch-n BINARY-LONG.
 01 stood-n BINARY-LONG.
+01 no-fit BINARY-LONG.
+01 fit-h BINARY-LONG.
+01 fit-r BINARY-LONG.
+01 fit-ceil BINARY-LONG.
 01 lname PIC X(8).
 01 lump-n BINARY-LONG.
 01 byte-n BINARY-LONG.
@@ -148,6 +160,7 @@ main-door.
     IF act-mode = 9
         PERFORM init-doors
         MOVE 0 TO saw-on
+        MOVE 0 TO path-n
         MOVE 0 TO busy-out
         MOVE 0 TO moved-out
         MOVE 1 TO door-ready
@@ -168,6 +181,25 @@ main-door.
     IF act-mode = 4
         MOVE cross-ln TO li
         PERFORM mon-crossed
+        MOVE 0 TO busy-out
+        MOVE 0 TO moved-out
+        GOBACK
+    END-IF
+    *> 6 = one accepted player step. The slide is not a straight chord.
+    IF act-mode = 6
+        IF path-n < 8
+            ADD 1 TO path-n
+            MOVE ply-x TO path-x(path-n)
+            MOVE ply-y TO path-y(path-n)
+        END-IF
+        MOVE 0 TO busy-out
+        MOVE 0 TO moved-out
+        GOBACK
+    END-IF
+    *> 8 = cross the steps just taken, before enemies and lights.
+    *> EV_Teleport's fog randoms belong with the player move.
+    IF act-mode = 8
+        PERFORM scan-cross
         MOVE 0 TO busy-out
         MOVE 0 TO moved-out
         GOBACK
@@ -203,6 +235,7 @@ init-doors.
         MOVE 0 TO fl-on(fl-i)
     END-PERFORM
     MOVE 0 TO pend-tag
+    MOVE 0 TO path-n
     .
 
 scan-cross.
@@ -213,16 +246,39 @@ scan-cross.
         MOVE ply-x TO saw-x
         MOVE ply-y TO saw-y
         MOVE 1 TO saw-on
+        MOVE 0 TO path-n
         EXIT PARAGRAPH
     END-IF
-    IF ply-x = saw-x AND ply-y = saw-y
-        EXIT PARAGRAPH
-    END-IF
-    CALL "sub_i32" USING BY VALUE ply-x BY VALUE saw-x RETURNING tdx
-    CALL "sub_i32" USING BY VALUE ply-y BY VALUE saw-y RETURNING tdy
-    MOVE saw-x TO ox
-    MOVE saw-y TO oy
+    *> Each accepted step, then the final point. A wall slide crosses
+    *> the line on a dogleg the straight start-to-end chord misses.
+    MOVE saw-x TO seg-x
+    MOVE saw-y TO seg-y
     MOVE 0 TO tel-done
+    PERFORM VARYING pi FROM 1 BY 1 UNTIL pi > path-n OR tel-done = 1
+        MOVE path-x(pi) TO leg-x
+        MOVE path-y(pi) TO leg-y
+        PERFORM scan-leg
+        MOVE leg-x TO seg-x
+        MOVE leg-y TO seg-y
+    END-PERFORM
+    IF tel-done = 0
+        MOVE ply-x TO leg-x
+        MOVE ply-y TO leg-y
+        PERFORM scan-leg
+    END-IF
+    MOVE 0 TO path-n
+    MOVE ply-x TO saw-x
+    MOVE ply-y TO saw-y
+    .
+
+scan-leg.
+    IF leg-x = seg-x AND leg-y = seg-y
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE leg-x BY VALUE seg-x RETURNING tdx
+    CALL "sub_i32" USING BY VALUE leg-y BY VALUE seg-y RETURNING tdy
+    MOVE seg-x TO ox
+    MOVE seg-y TO oy
     PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line
         IF ln-spec(li) NOT = 0
             CALL "trace_frac" USING
@@ -232,14 +288,48 @@ scan-cross.
                 RETURNING frac
             IF frac > 0 AND frac < 65536
                 PERFORM cross-hit
-                IF tel-done = 1
-                    EXIT PERFORM
-                END-IF
+            ELSE
+                PERFORM body-cross
+            END-IF
+            IF tel-done = 1
+                EXIT PERFORM
             END-IF
         END-IF
     END-PERFORM
-    MOVE ply-x TO saw-x
-    MOVE ply-y TO saw-y
+    .
+
+body-cross.
+    *> The center missed the linedef, but the 16-unit body still
+    *> changed sides of a line the box straddles. That is a walk trigger.
+    MOVE ln-v1(li) TO v1-slot
+    MOVE ln-v2(li) TO tmp-n
+    CALL "sub_i32" USING BY VALUE vtx-x(tmp-n)
+        BY VALUE vtx-x(v1-slot) RETURNING ldx
+    CALL "sub_i32" USING BY VALUE vtx-y(tmp-n)
+        BY VALUE vtx-y(v1-slot) RETURNING ldy
+    MOVE seg-x TO dx
+    MOVE seg-y TO dy
+    PERFORM point-side
+    MOVE side-bit TO p1
+    MOVE leg-x TO dx
+    MOVE leg-y TO dy
+    PERFORM point-side
+    IF side-bit = p1
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE leg-x BY VALUE ply-rad RETURNING box-l
+    CALL "add_i32" USING BY VALUE leg-x BY VALUE ply-rad RETURNING box-r
+    CALL "sub_i32" USING BY VALUE leg-y BY VALUE ply-rad RETURNING box-b
+    CALL "add_i32" USING BY VALUE leg-y BY VALUE ply-rad RETURNING box-t
+    IF box-r <= ln-bl(li) OR box-l >= ln-br(li)
+        OR box-t <= ln-bb(li) OR box-b >= ln-bt(li)
+        EXIT PARAGRAPH
+    END-IF
+    MOVE li TO walk-i
+    PERFORM ride-box-side
+    IF side-bit = -1
+        PERFORM cross-hit
+    END-IF
     .
 
 start-lower.
@@ -599,6 +689,17 @@ drop-floor.
             MOVE 1 TO past
         END-IF
     END-IF
+    *> A lift that is not a crusher reverses when a body would not fit.
+    IF fl-dir(fl-i) > 0 AND fl-kind(fl-i) = 1 AND next-h > old-h
+        PERFORM rise-blocked
+        IF no-fit = 1
+            MOVE -1 TO fl-dir(fl-i)
+            MOVE fl-low(fl-i) TO fl-dest(fl-i)
+            MOVE "pstart" TO snd-name
+            CALL "sfx-play" USING snd-name
+            EXIT PARAGRAPH
+        END-IF
+    END-IF
     IF next-h = old-h AND past = 0
         EXIT PARAGRAPH
     END-IF
@@ -722,9 +823,11 @@ clip-one-line.
 ride-box-side.
     MOVE ln-v1(walk-i) TO v1-slot
     MOVE ln-v2(walk-i) TO tmp-n
-    CALL "delta_shr16" USING BY VALUE vtx-x(tmp-n)
+    *> Full fixed delta. point-side already shifts by 8; a prior >>16
+    *> collapsed this ledge to a -1 slope and the box looked like it crossed.
+    CALL "sub_i32" USING BY VALUE vtx-x(tmp-n)
         BY VALUE vtx-x(v1-slot) RETURNING ldx
-    CALL "delta_shr16" USING BY VALUE vtx-y(tmp-n)
+    CALL "sub_i32" USING BY VALUE vtx-y(tmp-n)
         BY VALUE vtx-y(v1-slot) RETURNING ldy
     IF ldx = 0
         IF box-r < vtx-x(v1-slot)
@@ -851,6 +954,14 @@ cross-hit.
         END-IF
         PERFORM walk-tag-door
         IF spec-n = 2
+            MOVE 0 TO ln-spec(li)
+        END-IF
+    END-IF
+    *> WR 105 retriggers. W1 108 opens once. Both are blaze raise.
+    IF spec-n = 105 OR spec-n = 108
+        MOVE 5 TO dtype
+        PERFORM walk-tag-door
+        IF spec-n = 108
             MOVE 0 TO ln-spec(li)
         END-IF
     END-IF
@@ -1136,6 +1247,7 @@ arm-plat.
     MOVE 0 TO fl-wait(fl-i)
     MOVE 1 TO fl-kind(fl-i)
     MOVE tmp-n TO fl-high(fl-i)
+    MOVE nb-h TO fl-low(fl-i)
     .
 
 low-floor.
@@ -1305,6 +1417,10 @@ go-teleport.
                 MOVE 1 TO tel-done
                 MOVE "telept" TO snd-name
                 CALL "sfx-play" USING snd-name
+                *> Two MT_TFOG lastlook draws. The player then ignores cmd for 18 tics.
+                CALL "p-random" USING rnd-fog
+                CALL "p-random" USING rnd-fog
+                MOVE 18 TO ply-rtel
                 MOVE 1 TO moved-out
             END-IF
         END-IF
@@ -1531,9 +1647,9 @@ try-spec.
         EXIT PARAGRAPH
     END-IF
     IF spec-n = 21 OR spec-n = 62 OR spec-n = 120
-        OR spec-n = 122
+        OR spec-n = 122 OR spec-n = 123
         MOVE 262144 TO spd-h
-        IF spec-n = 120 OR spec-n = 122
+        IF spec-n = 120 OR spec-n = 122 OR spec-n = 123
             MOVE 524288 TO spd-h
         END-IF
         PERFORM start-plat
@@ -1542,6 +1658,16 @@ try-spec.
             IF spec-n = 21 OR spec-n = 122
                 MOVE 0 TO ln-spec(li)
             END-IF
+            MOVE 1 TO moved-out
+        END-IF
+        EXIT PARAGRAPH
+    END-IF
+    *> S1 20: raiseToNearestAndChange. E1M3 line 1020 lifts tag 16.
+    IF spec-n = 20
+        PERFORM raise-nearest
+        IF got-sw = 1
+            PERFORM flip-switch
+            MOVE 0 TO ln-spec(li)
             MOVE 1 TO moved-out
         END-IF
         EXIT PARAGRAPH
@@ -1704,6 +1830,13 @@ tick-one.
         IF bad = 1
             MOVE old-h TO sec-ceil-h(keep-sec)
             MOVE 0 TO past
+            *> A closing door that hits something goes back up.
+            *> Close and blaze-close keep pushing.
+            IF dr-type(di) = 0 OR dr-type(di) = 5
+                MOVE 1 TO dr-dir(di)
+                MOVE "doropn" TO snd-name
+                CALL "sfx-play" USING snd-name
+            END-IF
         ELSE
             MOVE 1 TO moved-out
         END-IF
@@ -2056,7 +2189,65 @@ ceiling-fits.
         CALL "sub_i32" USING BY VALUE next-h BY VALUE ply-z RETURNING gap
         IF gap < ply-h
             MOVE 1 TO bad
+            EXIT PARAGRAPH
         END-IF
+    END-IF
+    IF ply-hp <= 0
+        EXIT PARAGRAPH
+    END-IF
+    *> The body can stand in the next sector and still reach under the lip.
+    CALL "sub_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING box-l
+    CALL "add_i32" USING BY VALUE ply-x BY VALUE ply-rad RETURNING box-r
+    CALL "sub_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING box-b
+    CALL "add_i32" USING BY VALUE ply-y BY VALUE ply-rad RETURNING box-t
+    PERFORM VARYING li FROM 1 BY 1 UNTIL li > n-line OR bad = 1
+        IF ln-front(li) + 1 = keep-sec
+            OR (ln-back(li) >= 0 AND ln-back(li) + 1 = keep-sec)
+            IF box-r > ln-bl(li) AND box-l < ln-br(li)
+                AND box-t > ln-bb(li) AND box-b < ln-bt(li)
+                MOVE li TO walk-i
+                PERFORM ride-box-side
+                IF side-bit = -1
+                    PERFORM lip-gap
+                END-IF
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+lip-gap.
+    COMPUTE fs = ln-front(li) + 1
+    COMPUTE bs = ln-back(li) + 1
+    IF fs < 1 OR bs < 1 OR fs > n-sector OR bs > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    IF fs = keep-sec
+        MOVE next-h TO top-h
+    ELSE
+        MOVE sec-ceil-h(fs) TO top-h
+    END-IF
+    IF bs = keep-sec
+        IF next-h < top-h
+            MOVE next-h TO top-h
+        END-IF
+    ELSE
+        IF sec-ceil-h(bs) < top-h
+            MOVE sec-ceil-h(bs) TO top-h
+        END-IF
+    END-IF
+    IF sec-floor-h(fs) > sec-floor-h(bs)
+        MOVE sec-floor-h(fs) TO bot-h
+    ELSE
+        MOVE sec-floor-h(bs) TO bot-h
+    END-IF
+    CALL "sub_i32" USING BY VALUE top-h BY VALUE bot-h RETURNING gap
+    IF gap < ply-h
+        MOVE 1 TO bad
+        EXIT PARAGRAPH
+    END-IF
+    CALL "sub_i32" USING BY VALUE top-h BY VALUE ply-z RETURNING gap
+    IF gap < ply-h
+        MOVE 1 TO bad
     END-IF
     .
 
@@ -2176,6 +2367,90 @@ point-side.
         MOVE 0 TO side-bit
     ELSE
         MOVE 1 TO side-bit
+    END-IF
+    .
+
+rise-blocked.
+    *> T_MovePlane / P_ChangeSector: a non-crusher backs off instead of
+    *> lifting a body into a ceiling. The low room beside this lift is
+    *> what stops it on MAP05.
+    MOVE 0 TO no-fit
+    IF ply-on = 1 AND ply-hp > 0
+        MOVE ply-x TO try-x
+        MOVE ply-y TO try-y
+        MOVE ply-rad TO fit-r
+        MOVE ply-h TO fit-h
+        PERFORM fit-one
+    END-IF
+    PERFORM VARYING mi FROM 1 BY 1 UNTIL mi > n-mobj OR no-fit = 1
+        IF mo-hp(mi) > 0 AND mo-h(mi) > 0
+            CALL "bit_and" USING BY VALUE mo-flags(mi) BY VALUE 4
+                RETURNING bit-n
+            IF bit-n NOT = 0
+                MOVE mo-x(mi) TO try-x
+                MOVE mo-y(mi) TO try-y
+                MOVE mo-rad(mi) TO fit-r
+                MOVE mo-h(mi) TO fit-h
+                PERFORM fit-one
+            END-IF
+        END-IF
+    END-PERFORM
+    .
+
+fit-one.
+    PERFORM sector-at
+    IF sec-slot < 1 OR sec-slot > n-sector
+        EXIT PARAGRAPH
+    END-IF
+    MOVE sec-ceil-h(sec-slot) TO fit-ceil
+    MOVE 0 TO touch-n
+    IF sec-slot = keep-sec
+        MOVE 1 TO touch-n
+    END-IF
+    CALL "sub_i32" USING BY VALUE try-x BY VALUE fit-r RETURNING box-l
+    CALL "add_i32" USING BY VALUE try-x BY VALUE fit-r RETURNING box-r
+    CALL "sub_i32" USING BY VALUE try-y BY VALUE fit-r RETURNING box-b
+    CALL "add_i32" USING BY VALUE try-y BY VALUE fit-r RETURNING box-t
+    PERFORM VARYING walk-i FROM 1 BY 1 UNTIL walk-i > n-line
+        PERFORM fit-one-line
+    END-PERFORM
+    IF touch-n = 0
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE gap = fit-ceil - fit-h
+    IF next-h > gap
+        MOVE 1 TO no-fit
+    END-IF
+    .
+
+fit-one-line.
+    COMPUTE fs = ln-front(walk-i) + 1
+    IF ln-back(walk-i) < 0
+        MOVE 0 TO bs
+    ELSE
+        COMPUTE bs = ln-back(walk-i) + 1
+    END-IF
+    IF fs NOT = keep-sec AND bs NOT = keep-sec
+        EXIT PARAGRAPH
+    END-IF
+    IF box-r <= ln-bl(walk-i) OR box-l >= ln-br(walk-i)
+        OR box-t <= ln-bb(walk-i) OR box-b >= ln-bt(walk-i)
+        EXIT PARAGRAPH
+    END-IF
+    PERFORM ride-box-side
+    IF side-bit NOT = -1
+        EXIT PARAGRAPH
+    END-IF
+    MOVE 1 TO touch-n
+    IF fs >= 1 AND fs <= n-sector
+        IF sec-ceil-h(fs) < fit-ceil
+            MOVE sec-ceil-h(fs) TO fit-ceil
+        END-IF
+    END-IF
+    IF bs >= 1 AND bs <= n-sector
+        IF sec-ceil-h(bs) < fit-ceil
+            MOVE sec-ceil-h(bs) TO fit-ceil
+        END-IF
     END-IF
     .
 

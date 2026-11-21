@@ -425,6 +425,7 @@ main-view.
         MOVE 50 TO ply-maxr
         MOVE 0 TO ply-pack
         MOVE 0 TO ply-sg
+        MOVE 0 TO ply-ssg
         MOVE 0 TO ply-cg
         MOVE 0 TO ply-rl
         MOVE 0 TO ply-pg
@@ -440,6 +441,7 @@ main-view.
         MOVE 0 TO ply-atype
         MOVE 0 TO ply-time
         MOVE 0 TO ply-pain
+        MOVE 0 TO ply-bonus
         MOVE 100 TO ply-oldh
         MOVE 0 TO ply-fwait
         MOVE 0 TO ply-fkind
@@ -462,6 +464,7 @@ main-view.
         MOVE 0 TO ply-exit
         MOVE 0 TO ply-time
         MOVE 0 TO ply-pain
+        MOVE 0 TO ply-bonus
         MOVE 0 TO ply-fwait
         MOVE 0 TO ply-fkind
         MOVE 0 TO gun-mode
@@ -491,6 +494,9 @@ main-view.
             END-IF
             IF ply-weap = 8
                 MOVE "SAWGA0" TO gun-body
+            END-IF
+            IF ply-weap = 9
+                MOVE "SHT2A0" TO gun-body
             END-IF
         END-IF
         MOVE ply-x TO view-x

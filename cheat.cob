@@ -311,6 +311,11 @@ do-god.
 
 do-ammo.
     MOVE 1 TO ply-sg
+    MOVE "MAP01" TO lname
+    CALL "wad-find" USING lname lump-id
+    IF lump-id >= 0
+        MOVE 1 TO ply-ssg
+    END-IF
     MOVE 1 TO ply-cg
     MOVE 1 TO ply-rl
     MOVE 1 TO ply-pg
