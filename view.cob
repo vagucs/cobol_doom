@@ -28,6 +28,12 @@ COPY "playstate.cpy".
 01 xtv BINARY-LONG OCCURS 321 TIMES.
 01 yslope BINARY-LONG OCCURS 200 TIMES.
 01 dist-scale BINARY-LONG OCCURS 320 TIMES.
+*> R_MakeSpans / R_MapPlane (Harbour r_plane.prg). Indice 1 = linha 0.
+01 sp-x BINARY-LONG OCCURS 200 TIMES.
+01 ch-h BINARY-LONG OCCURS 200 TIMES.
+01 ch-d BINARY-LONG OCCURS 200 TIMES.
+01 ch-xs BINARY-LONG OCCURS 200 TIMES.
+01 ch-ys BINARY-LONG OCCURS 200 TIMES.
 01 scale-light BINARY-LONG OCCURS 768 TIMES.
 01 z-light BINARY-LONG OCCURS 2048 TIMES.
 01 solid-a BINARY-LONG OCCURS 128 TIMES.
@@ -201,11 +207,20 @@ COPY "playstate.cpy".
 01 y-end BINARY-LONG.
 01 t1 BINARY-LONG.
 01 b1 BINARY-LONG.
+01 t2 BINARY-LONG.
+01 b2 BINARY-LONG.
 01 plane-h BINARY-LONG.
 01 dist-n BINARY-LONG.
 01 dist-out BINARY-LONG.
 01 run-len BINARY-LONG.
 01 frac BINARY-LONG.
+01 xfrac BINARY-LONG.
+01 yfrac BINARY-LONG.
+01 xstep BINARY-LONG.
+01 ystep BINARY-LONG.
+01 span-y BINARY-LONG.
+01 span-x1 BINARY-LONG.
+01 span-x2 BINARY-LONG.
 01 prod BINARY-LONG.
 01 count-n BINARY-LONG.
 01 dest-at BINARY-LONG.
@@ -710,6 +725,10 @@ setup-frame.
     MOVE sin-out TO view-sin
     PERFORM cos-at
     MOVE sin-out TO view-cos
+    *> R_ClearPlanes: base-xs muda com o angulo.
+    PERFORM VARYING i FROM 1 BY 1 UNTIL i > 200
+        MOVE 0 TO ch-h(i)
+    END-PERFORM
     .
 
 clear-clip.
@@ -1919,74 +1938,158 @@ draw-flat.
     IF plane-h = 0
         EXIT PARAGRAPH
     END-IF
+    COMPUTE x-end = vp-max(pl-i) + 1
     MOVE vp-min(pl-i) TO x-i
-    IF x-i < 0
-        MOVE 0 TO x-i
-    END-IF
-    MOVE vp-max(pl-i) TO x-end
-    COMPUTE tmp = view-w - 1
-    IF x-end > tmp
-        MOVE tmp TO x-end
-    END-IF
     PERFORM UNTIL x-i > x-end
-        COMPUTE vp-at = (pl-i - 1) * 320 + x-i + 1
-        MOVE vp-top(vp-at) TO t1
-        MOVE vp-bot(vp-at) TO b1
-        IF t1 <= b1 AND t1 NOT = 255
-            MOVE b1 TO y-end
-            COMPUTE tmp = view-h - 1
-            IF y-end > tmp
-                MOVE tmp TO y-end
-            END-IF
-            IF t1 < 0
-                MOVE 0 TO t1
-            END-IF
-            CALL "add_i32" USING BY VALUE view-ang BY VALUE xtv(x-i + 1)
-                RETURNING ang-in
-            CALL "ushr_i" USING BY VALUE ang-in BY VALUE 19 RETURNING idx
-            CALL "bit_and" USING BY VALUE idx BY VALUE 8191 RETURNING idx
-            COMPUTE slot = idx + 1
-            MOVE finesine(slot) TO sin-v
-            COMPUTE slot = idx + 2048 + 1
-            MOVE finesine(slot) TO cos-v
-            PERFORM VARYING y-i FROM t1 BY 1 UNTIL y-i > y-end
-                CALL "fixed_mul" USING BY VALUE plane-h BY VALUE yslope(y-i + 1)
-                    RETURNING dist-n
-                CALL "fixed_mul" USING BY VALUE dist-n
-                    BY VALUE dist-scale(x-i + 1) RETURNING run-len
-                CALL "fixed_mul" USING BY VALUE cos-v BY VALUE run-len
-                    RETURNING tmp
-                CALL "add_i32" USING BY VALUE view-x BY VALUE tmp RETURNING dx
-                CALL "fixed_mul" USING BY VALUE sin-v BY VALUE run-len
-                    RETURNING tmp
-                CALL "sub_i32" USING BY VALUE 0 BY VALUE view-y RETURNING dy
-                CALL "sub_i32" USING BY VALUE dy BY VALUE tmp RETURNING dy
-                CALL "ushr_i" USING BY VALUE dist-n BY VALUE 20 RETURNING idx
-                IF idx > 127
-                    MOVE 127 TO idx
-                END-IF
-                IF idx < 0
-                    MOVE 127 TO idx
-                END-IF
-                COMPUTE slot = wall-base + idx + 1
-                MOVE z-light(slot) TO dc-map
-                CALL "ushr_i" USING BY VALUE dx BY VALUE 16 RETURNING pix
-                CALL "bit_and" USING BY VALUE pix BY VALUE 63 RETURNING pix
-                CALL "ushr_i" USING BY VALUE dy BY VALUE 10 RETURNING byte-n
-                CALL "bit_and" USING BY VALUE byte-n BY VALUE 4032
-                    RETURNING byte-n
-                CALL "bit_or" USING BY VALUE pix BY VALUE byte-n RETURNING pix
-                CALL "byte_at" USING BY REFERENCE flat-buf BY VALUE pix
-                    RETURNING byte-n
-                COMPUTE at-pos = dc-map * 256 + byte-n
-                CALL "byte_at" USING BY REFERENCE cmap-buf BY VALUE at-pos
-                    RETURNING prod
-                COMPUTE dest-at = (y-i + view-oy) * 320 + x-i + view-ox
-                CALL "poke_byte" USING BY REFERENCE fb BY VALUE dest-at
-                    BY VALUE prod
-            END-PERFORM
-        END-IF
+        COMPUTE col-n = x-i - 1
+        PERFORM plane-top-at
+        MOVE pix TO t1
+        PERFORM plane-bot-at
+        MOVE byte-n TO b1
+        MOVE x-i TO col-n
+        PERFORM plane-top-at
+        MOVE pix TO t2
+        PERFORM plane-bot-at
+        MOVE byte-n TO b2
+        PERFORM make-spans
         ADD 1 TO x-i
+    END-PERFORM
+    .
+
+*> Sentinela 255/0 fora da tela, como PlaneTopAt / PlaneBottomAt.
+plane-top-at.
+    IF col-n < 0 OR col-n >= 320
+        MOVE 255 TO pix
+    ELSE
+        COMPUTE vp-at = (pl-i - 1) * 320 + col-n + 1
+        MOVE vp-top(vp-at) TO pix
+    END-IF
+    .
+
+plane-bot-at.
+    IF col-n < 0 OR col-n >= 320
+        MOVE 0 TO byte-n
+    ELSE
+        COMPUTE vp-at = (pl-i - 1) * 320 + col-n + 1
+        MOVE vp-bot(vp-at) TO byte-n
+    END-IF
+    .
+
+*> R_MakeSpans. x-i e a coluna corrente. t1/b1 sao a coluna anterior.
+make-spans.
+    PERFORM UNTIL t1 >= t2 OR t1 > b1
+        IF t1 >= 0 AND t1 < 200
+            COMPUTE slot = t1 + 1
+            MOVE sp-x(slot) TO span-x1
+            COMPUTE span-x2 = x-i - 1
+            MOVE t1 TO span-y
+            PERFORM map-plane
+        END-IF
+        ADD 1 TO t1
+    END-PERFORM
+    PERFORM UNTIL b1 <= b2 OR b1 < t1
+        IF b1 >= 0 AND b1 < 200
+            COMPUTE slot = b1 + 1
+            MOVE sp-x(slot) TO span-x1
+            COMPUTE span-x2 = x-i - 1
+            MOVE b1 TO span-y
+            PERFORM map-plane
+        END-IF
+        SUBTRACT 1 FROM b1
+    END-PERFORM
+    PERFORM UNTIL t2 >= t1 OR t2 > b2
+        IF t2 >= 0 AND t2 < 200
+            COMPUTE slot = t2 + 1
+            MOVE x-i TO sp-x(slot)
+        END-IF
+        ADD 1 TO t2
+    END-PERFORM
+    PERFORM UNTIL b2 <= b1 OR b2 < t2
+        IF b2 >= 0 AND b2 < 200
+            COMPUTE slot = b2 + 1
+            MOVE x-i TO sp-x(slot)
+        END-IF
+        SUBTRACT 1 FROM b2
+    END-PERFORM
+    .
+
+*> R_MapPlane: uma faixa horizontal na linha span-y, de span-x1 a span-x2.
+map-plane.
+    IF span-y < 0 OR span-y >= view-h OR span-x1 > span-x2
+        EXIT PARAGRAPH
+    END-IF
+    COMPUTE slot = span-y + 1
+    IF plane-h NOT = ch-h(slot)
+        MOVE plane-h TO ch-h(slot)
+        CALL "fixed_mul" USING BY VALUE plane-h BY VALUE yslope(slot)
+            RETURNING dist-n
+        MOVE dist-n TO ch-d(slot)
+        CALL "fixed_mul" USING BY VALUE dist-n BY VALUE base-xs
+            RETURNING tmp
+        MOVE tmp TO ch-xs(slot)
+        CALL "fixed_mul" USING BY VALUE dist-n BY VALUE base-ys
+            RETURNING tmp
+        MOVE tmp TO ch-ys(slot)
+    ELSE
+        MOVE ch-d(slot) TO dist-n
+    END-IF
+    MOVE ch-xs(slot) TO xstep
+    MOVE ch-ys(slot) TO ystep
+    CALL "fixed_mul" USING BY VALUE dist-n
+        BY VALUE dist-scale(span-x1 + 1) RETURNING run-len
+    CALL "add_i32" USING BY VALUE view-ang BY VALUE xtv(span-x1 + 1)
+        RETURNING ang-in
+    CALL "ushr_i" USING BY VALUE ang-in BY VALUE 19 RETURNING idx
+    CALL "bit_and" USING BY VALUE idx BY VALUE 8191 RETURNING idx
+    COMPUTE slot = idx + 1
+    MOVE finesine(slot) TO sin-v
+    COMPUTE slot = idx + 2048 + 1
+    MOVE finesine(slot) TO cos-v
+    CALL "fixed_mul" USING BY VALUE cos-v BY VALUE run-len RETURNING tmp
+    CALL "add_i32" USING BY VALUE view-x BY VALUE tmp RETURNING xfrac
+    CALL "sub_i32" USING BY VALUE 0 BY VALUE view-y RETURNING dy
+    CALL "fixed_mul" USING BY VALUE sin-v BY VALUE run-len RETURNING tmp
+    CALL "sub_i32" USING BY VALUE dy BY VALUE tmp RETURNING yfrac
+    CALL "ushr_i" USING BY VALUE dist-n BY VALUE 20 RETURNING idx
+    IF idx > 127
+        MOVE 127 TO idx
+    END-IF
+    IF idx < 0
+        MOVE 127 TO idx
+    END-IF
+    COMPUTE slot = wall-base + idx + 1
+    MOVE z-light(slot) TO dc-map
+    PERFORM draw-span
+    .
+
+*> R_DrawSpan: anda a faixa somando xstep/ystep. Sem detail baixo.
+draw-span.
+    COMPUTE dest-at = (span-y + view-oy) * 320 + span-x1 + view-ox
+    COMPUTE count-n = span-x2 - span-x1
+    PERFORM UNTIL count-n < 0
+        IF dest-at < 0 OR dest-at >= 64000
+            EXIT PERFORM
+        END-IF
+        CALL "ushr_i" USING BY VALUE xfrac BY VALUE 16 RETURNING pix
+        CALL "bit_and" USING BY VALUE pix BY VALUE 63 RETURNING pix
+        CALL "ushr_i" USING BY VALUE yfrac BY VALUE 10 RETURNING byte-n
+        CALL "bit_and" USING BY VALUE byte-n BY VALUE 4032 RETURNING byte-n
+        CALL "bit_or" USING BY VALUE pix BY VALUE byte-n RETURNING pix
+        IF pix < 0 OR pix >= 4096
+            MOVE 0 TO byte-n
+        ELSE
+            CALL "byte_at" USING BY REFERENCE flat-buf BY VALUE pix
+                RETURNING byte-n
+        END-IF
+        COMPUTE at-pos = dc-map * 256 + byte-n
+        CALL "byte_at" USING BY REFERENCE cmap-buf BY VALUE at-pos
+            RETURNING prod
+        CALL "poke_byte" USING BY REFERENCE fb BY VALUE dest-at
+            BY VALUE prod
+        CALL "add_i32" USING BY VALUE xfrac BY VALUE xstep RETURNING xfrac
+        CALL "add_i32" USING BY VALUE yfrac BY VALUE ystep RETURNING yfrac
+        ADD 1 TO dest-at
+        SUBTRACT 1 FROM count-n
     END-PERFORM
     .
 
